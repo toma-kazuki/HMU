@@ -1,0 +1,1506 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>System Design Concept Document — Writing Guide</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --surface: #1a1d27;
+    --surface2: #22263a;
+    --border: #2e3350;
+    --accent: #4f8ef7;
+    --accent2: #7c6af7;
+    --green: #3ecf8e;
+    --amber: #f5a623;
+    --red: #e05263;
+    --text: #e4e8f5;
+    --text-muted: #8892b0;
+    --text-dim: #4a5270;
+    --radius: 10px;
+    --mono: 'SF Mono', 'Fira Code', monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ── */
+  .app { display: flex; height: 100vh; overflow: hidden; }
+  .sidebar {
+    width: 260px;
+    min-width: 260px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+  }
+  .main {
+    flex: 1;
+    overflow-y: auto;
+    padding: 36px 40px;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar-header {
+    padding: 20px 18px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .sidebar-header .logo {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 4px;
+  }
+  .sidebar-header h2 {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text);
+    line-height: 1.4;
+  }
+
+  .nav-section { padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .nav-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    padding: 4px 18px 6px;
+  }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 18px;
+    cursor: pointer;
+    border-left: 3px solid transparent;
+    transition: all 0.15s;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active {
+    background: rgba(79,142,247,0.1);
+    border-left-color: var(--accent);
+    color: var(--accent);
+  }
+  .nav-item .step-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 700;
+    font-family: var(--mono);
+    color: var(--text-dim);
+    padding: 1px 5px;
+    min-width: 22px;
+    text-align: center;
+  }
+  .nav-item.active .step-badge {
+    background: rgba(79,142,247,0.2);
+    border-color: var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── Main content ── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  .page-header { margin-bottom: 28px; }
+  .page-header .breadcrumb {
+    font-size: 11px;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 8px;
+  }
+  .page-header h1 { font-size: 22px; font-weight: 700; color: var(--text); }
+  .page-header .subtitle { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+  /* ── Cards ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .card.accent-left { border-left: 3px solid var(--accent); }
+  .card.green-left { border-left: 3px solid var(--green); }
+  .card.amber-left { border-left: 3px solid var(--amber); }
+  .card.purple-left { border-left: 3px solid var(--accent2); }
+
+  .card h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card p { color: var(--text-muted); font-size: 13px; line-height: 1.65; }
+
+  /* ── Tags ── */
+  .tag {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    padding: 2px 7px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .tag-blue { background: rgba(79,142,247,0.15); color: var(--accent); border: 1px solid rgba(79,142,247,0.3); }
+  .tag-green { background: rgba(62,207,142,0.12); color: var(--green); border: 1px solid rgba(62,207,142,0.3); }
+  .tag-amber { background: rgba(245,166,35,0.12); color: var(--amber); border: 1px solid rgba(245,166,35,0.3); }
+  .tag-purple { background: rgba(124,106,247,0.12); color: var(--accent2); border: 1px solid rgba(124,106,247,0.3); }
+  .tag-red { background: rgba(224,82,99,0.12); color: var(--red); border: 1px solid rgba(224,82,99,0.3); }
+
+  /* ── Doc outline ── */
+  .doc-outline { display: flex; flex-direction: column; gap: 0; }
+
+  .section-row {
+    display: flex;
+    align-items: stretch;
+    gap: 0;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .section-row:hover .section-body { background: rgba(255,255,255,0.025); }
+
+  .section-number {
+    width: 40px;
+    min-width: 40px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  .section-num-badge {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: var(--surface2);
+    border: 2px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: var(--mono);
+    color: var(--text-muted);
+    z-index: 1;
+    margin-top: 16px;
+  }
+  .section-line {
+    width: 2px;
+    background: var(--border);
+    flex: 1;
+    margin: 2px auto 0;
+  }
+  .section-row:last-child .section-line { background: transparent; }
+
+  .section-body {
+    flex: 1;
+    padding: 14px 16px 18px;
+    border-radius: var(--radius);
+    margin: 6px 0;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    transition: background 0.15s;
+  }
+  .section-body .sec-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .section-body h4 { font-size: 14px; font-weight: 600; color: var(--text); }
+  .section-body .sec-desc { font-size: 13px; color: var(--text-muted); line-height: 1.6; }
+
+  .visuals-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+  }
+  .visual-chip {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 4px 9px;
+    font-size: 11.5px;
+    color: var(--text-muted);
+  }
+  .visual-chip .icon { font-size: 12px; }
+
+  /* purpose badge colors per section */
+  .s1 .section-num-badge { border-color: var(--accent); color: var(--accent); background: rgba(79,142,247,0.1); }
+  .s2 .section-num-badge { border-color: var(--green); color: var(--green); background: rgba(62,207,142,0.1); }
+  .s3 .section-num-badge { border-color: var(--accent2); color: var(--accent2); background: rgba(124,106,247,0.1); }
+  .s4 .section-num-badge { border-color: var(--amber); color: var(--amber); background: rgba(245,166,35,0.1); }
+  .s5 .section-num-badge { border-color: #3dd6e0; color: #3dd6e0; background: rgba(61,214,224,0.1); }
+  .s6 .section-num-badge { border-color: var(--red); color: var(--red); background: rgba(224,82,99,0.1); }
+  .s7 .section-num-badge { border-color: var(--text-muted); color: var(--text-muted); background: var(--surface2); }
+
+  /* ── Principles grid ── */
+  .principles-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    margin-top: 0;
+  }
+  .principle-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 16px;
+  }
+  .principle-card .pc-icon { font-size: 22px; margin-bottom: 8px; }
+  .principle-card h4 { font-size: 13px; font-weight: 600; margin-bottom: 6px; color: var(--text); }
+  .principle-card p { font-size: 12px; color: var(--text-muted); line-height: 1.6; }
+
+  /* ── Table ── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12.5px;
+  }
+  .data-table thead tr {
+    background: var(--surface2);
+    border-bottom: 2px solid var(--border);
+  }
+  .data-table thead th {
+    padding: 10px 14px;
+    text-align: left;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-muted);
+  }
+  .data-table tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+  }
+  .data-table tbody tr:hover { background: var(--surface2); }
+  .data-table tbody td { padding: 10px 14px; color: var(--text-muted); vertical-align: top; }
+  .data-table tbody td:first-child { color: var(--text); font-weight: 500; }
+
+  /* ── Flow diagram ── */
+  .flow-diagram {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    overflow-x: auto;
+    padding: 10px 0;
+  }
+  .flow-node {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    min-width: 110px;
+    text-align: center;
+    font-size: 12px;
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .flow-arrow {
+    font-size: 18px;
+    color: var(--text-dim);
+    padding: 0 4px;
+    flex-shrink: 0;
+  }
+  .flow-node.highlight {
+    background: rgba(79,142,247,0.1);
+    border-color: rgba(79,142,247,0.5);
+    color: var(--accent);
+  }
+
+  /* ── Callout ── */
+  .callout {
+    background: rgba(79,142,247,0.06);
+    border: 1px solid rgba(79,142,247,0.2);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    padding: 14px 16px;
+    margin: 14px 0;
+    font-size: 13px;
+    color: var(--text-muted);
+  }
+  .callout strong { color: var(--accent); }
+
+  .callout-amber {
+    background: rgba(245,166,35,0.06);
+    border-color: rgba(245,166,35,0.2);
+    border-left-color: var(--amber);
+  }
+  .callout-amber strong { color: var(--amber); }
+
+  .callout-green {
+    background: rgba(62,207,142,0.06);
+    border-color: rgba(62,207,142,0.2);
+    border-left-color: var(--green);
+  }
+  .callout-green strong { color: var(--green); }
+
+  /* ── HMI specific ── */
+  .hmi-layer {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    margin-bottom: 8px;
+  }
+  .hmi-layer-icon { font-size: 20px; width: 32px; text-align: center; }
+  .hmi-layer-content h5 { font-size: 13px; font-weight: 600; color: var(--text); }
+  .hmi-layer-content p { font-size: 12px; color: var(--text-muted); }
+  .hmi-layer-badge { margin-left: auto; }
+
+  /* ── Scrollbar ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* ── List styles ── */
+  .styled-list { padding-left: 18px; margin-top: 8px; }
+  .styled-list li { color: var(--text-muted); font-size: 13px; margin-bottom: 5px; line-height: 1.6; }
+  .styled-list li::marker { color: var(--accent); }
+
+  ol.styled-list li::marker { color: var(--accent); font-weight: 600; font-size: 12px; }
+
+  /* ── Divider ── */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ───────── SIDEBAR ───────── -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">HMU Design Guide</div>
+      <h2>System-Level Design Concept Writing Guide</h2>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Overview</div>
+      <div class="nav-item active" onclick="show('overview', this)">
+        <span>📋</span> Document Purpose
+      </div>
+      <div class="nav-item" onclick="show('principles', this)">
+        <span>🧭</span> Governing Principles
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Document Structure</div>
+      <div class="nav-item" onclick="show('outline', this)">
+        <span class="step-badge">§</span> Section Outline & Order
+      </div>
+      <div class="nav-item" onclick="show('s1', this)">
+        <span class="step-badge">1</span> Introduction & Scope
+      </div>
+      <div class="nav-item" onclick="show('s2', this)">
+        <span class="step-badge">2</span> Operational Context
+      </div>
+      <div class="nav-item" onclick="show('s3', this)">
+        <span class="step-badge">3</span> System Architecture
+      </div>
+      <div class="nav-item" onclick="show('s4', this)">
+        <span class="step-badge">4</span> Subsystem Decomposition
+      </div>
+      <div class="nav-item" onclick="show('s5', this)">
+        <span class="step-badge">5</span> Human–System Interaction
+      </div>
+      <div class="nav-item" onclick="show('s6', this)">
+        <span class="step-badge">6</span> Interface Design Concepts
+      </div>
+      <div class="nav-item" onclick="show('s7', this)">
+        <span class="step-badge">7</span> Design Decisions & Rationale
+      </div>
+    </div>
+
+    <div class="nav-section">
+      <div class="nav-label">Reference</div>
+      <div class="nav-item" onclick="show('visuals', this)">
+        <span>📊</span> Visual Selection Guide
+      </div>
+      <div class="nav-item" onclick="show('hmi', this)">
+        <span>🖥️</span> HMI/HSI-Specific Advice
+      </div>
+      <div class="nav-item" onclick="show('checklist', this)">
+        <span>✅</span> Document Checklist
+      </div>
+    </div>
+  </aside>
+
+  <!-- ───────── MAIN ───────── -->
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <div id="overview" class="page active">
+      <div class="page-header">
+        <div class="breadcrumb">Writing Guide</div>
+        <h1>System-Level Design Concept Document</h1>
+        <p class="subtitle">How professional PMs and systems engineers structure this document for HMI/HSI-focused software</p>
+      </div>
+
+      <div class="callout">
+        <strong>Scope of this guide:</strong> The document covers initial system-level design concept writing focused on <strong>human interface design</strong> and <strong>human-system interaction (HSI)</strong>, bridging the gap between a ConOps/requirements baseline and detailed design.
+      </div>
+
+      <div class="card accent-left">
+        <h3>What Is This Document?</h3>
+        <p>The System-Level Design Concept (sometimes called the System Design Description, SDD, or Preliminary Design Document) is the first design artifact that translates operational and human factors requirements into a coherent architectural approach. It answers the question: <em>"How will this system be built at a conceptual level?"</em></p>
+        <br/>
+        <p>It sits between the ConOps (what the system does operationally) and the detailed design specification (how each component is precisely built). Its primary audiences are:</p>
+        <ul class="styled-list" style="margin-top:10px;">
+          <li><strong>Systems engineers</strong> — to verify requirements traceability</li>
+          <li><strong>HMI/UX designers</strong> — to establish interaction paradigms</li>
+          <li><strong>Stakeholders and reviewers</strong> — to approve the design direction before expensive implementation begins</li>
+          <li><strong>Future maintainers</strong> — to understand design intent and key trade-offs</li>
+        </ul>
+      </div>
+
+      <div class="card green-left">
+        <h3>The "Top-Down, Outside-In" Rule</h3>
+        <p>Professional document authors follow a strict ordering logic: always move from <strong>context → structure → behavior → appearance → rationale</strong>. This mirrors how readers build mental models.</p>
+        <div class="flow-diagram" style="margin-top:14px; flex-wrap: wrap; gap: 6px;">
+          <div class="flow-node highlight">Context<br/><small style="color:var(--text-muted); font-weight:400;">Why & where</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">Architecture<br/><small style="color:var(--text-muted); font-weight:400;">What pieces</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">Behavior<br/><small style="color:var(--text-muted); font-weight:400;">How they interact</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">Appearance<br/><small style="color:var(--text-muted); font-weight:400;">What it looks like</small></div>
+          <div class="flow-arrow">→</div>
+          <div class="flow-node">Rationale<br/><small style="color:var(--text-muted); font-weight:400;">Why these choices</small></div>
+        </div>
+      </div>
+
+      <div class="card amber-left">
+        <h3>A Critical Distinction: Concept vs. Specification</h3>
+        <p>This document describes <em>concepts and intentions</em>, not precise specifications. Avoid pixel-perfect measurements, specific algorithm parameters, or implementation-level detail. The goal is to communicate design direction with enough fidelity to allow stakeholder review, not to serve as a build specification.</p>
+      </div>
+
+      <div class="two-col" style="margin-top:4px;">
+        <div class="card">
+          <h3>✅ Include in This Document</h3>
+          <ul class="styled-list">
+            <li>Functional block diagrams</li>
+            <li>Conceptual wireframes / sketches</li>
+            <li>System context diagrams</li>
+            <li>User task flow diagrams</li>
+            <li>Design decision tables</li>
+            <li>Interface architecture maps</li>
+            <li>Subsystem relationship tables</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h3>❌ Defer to Later Documents</h3>
+          <ul class="styled-list">
+            <li>Pixel-level UI specifications</li>
+            <li>Algorithm or database schemas</li>
+            <li>Test procedures</li>
+            <li>Detailed API definitions</li>
+            <li>Final color/font specifications</li>
+            <li>Implementation timelines</li>
+            <li>Code architecture patterns</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- PRINCIPLES -->
+    <div id="principles" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Overview</div>
+        <h1>Governing Principles</h1>
+        <p class="subtitle">The mental models professional PMs use when organizing this document</p>
+      </div>
+
+      <div class="principles-grid">
+        <div class="principle-card">
+          <div class="pc-icon">🔭</div>
+          <h4>1. Zoom-In Progressively</h4>
+          <p>Each section narrows the scope. Start at mission/enterprise level, then system level, then subsystem level, then interface level. Never start by showing a detailed screen before showing where it fits.</p>
+        </div>
+        <div class="principle-card">
+          <div class="pc-icon">🗺️</div>
+          <h4>2. Orient Before You Describe</h4>
+          <p>Every major section should open with a diagram or table that orients the reader spatially or structurally before narrative text explains the details.</p>
+        </div>
+        <div class="principle-card">
+          <div class="pc-icon">👤</div>
+          <h4>3. Human First in HSI Documents</h4>
+          <p>In an HSI-focused document, always describe the human role, tasks, and goals before describing the system response. The system architecture exists to serve the operator.</p>
+        </div>
+        <div class="principle-card">
+          <div class="pc-icon">🔗</div>
+          <h4>4. Requirements Traceability Throughout</h4>
+          <p>Every design choice should reference a requirement or ConOps statement. Even at conceptual level, the reader must see the link between a design decision and its functional or human-factors driver.</p>
+        </div>
+        <div class="principle-card">
+          <div class="pc-icon">⚖️</div>
+          <h4>5. Alternatives Are Not Failures</h4>
+          <p>Professional documents explicitly present alternatives that were <em>not</em> selected and explain why. This demonstrates rigor, builds reviewer trust, and protects design decisions in review.</p>
+        </div>
+        <div class="principle-card">
+          <div class="pc-icon">📐</div>
+          <h4>6. One Diagram, One Message</h4>
+          <p>Each diagram should communicate exactly one concept. Do not combine architecture, data flow, and interaction in one figure. Readers should be able to extract the key point in under 10 seconds.</p>
+        </div>
+        <div class="principle-card">
+          <div class="pc-icon">🎯</div>
+          <h4>7. Align Diagram Complexity to Audience</h4>
+          <p>Executive summary figures use high-level context diagrams. Technical sections use detailed block diagrams. The same system should be drawn at the appropriate abstraction level for its audience.</p>
+        </div>
+        <div class="principle-card">
+          <div class="pc-icon">📎</div>
+          <h4>8. Tables Complement Diagrams</h4>
+          <p>Every significant diagram should be accompanied by a table that names, defines, and cross-references its elements. Diagrams convey structure; tables convey completeness and traceability.</p>
+        </div>
+      </div>
+
+      <div class="callout callout-amber" style="margin-top:20px;">
+        <strong>NASA/Aerospace-specific note:</strong> In systems designed under NASA-STD-3001 or similar human systems integration standards, the document must additionally show how design choices address specific human performance parameters — workload, situational awareness, error tolerance — not just functional requirements.
+      </div>
+    </div>
+
+    <!-- OUTLINE -->
+    <div id="outline" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Document Structure</div>
+        <h1>Section Outline & Order</h1>
+        <p class="subtitle">The canonical ordering of a system-level design concept document focused on HMI/HSI</p>
+      </div>
+
+      <div class="callout">
+        <strong>Why this order matters:</strong> The ordering is not arbitrary. It mirrors the cognitive sequence a reviewer uses to evaluate a design — from context to structure to behavior to appearance to justification. Deviating from this order forces the reader to hold incomplete mental models.
+      </div>
+
+      <div class="doc-outline">
+
+        <div class="section-row s1" onclick="show('s1', null)">
+          <div class="section-number">
+            <div class="section-num-badge">1</div>
+            <div class="section-line"></div>
+          </div>
+          <div class="section-body">
+            <div class="sec-header">
+              <h4>Introduction &amp; Scope</h4>
+              <span class="tag tag-blue">Framing</span>
+            </div>
+            <p class="sec-desc">Purpose, document scope, intended audience, relationship to ConOps and requirements baseline, glossary.</p>
+            <div class="visuals-list">
+              <div class="visual-chip"><span class="icon">📄</span> No diagrams — text only</div>
+              <div class="visual-chip"><span class="icon">🗂️</span> Document lineage table</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-row s2" onclick="show('s2', null)">
+          <div class="section-number">
+            <div class="section-num-badge">2</div>
+            <div class="section-line"></div>
+          </div>
+          <div class="section-body">
+            <div class="sec-header">
+              <h4>Operational Context &amp; User Overview</h4>
+              <span class="tag tag-green">Context</span>
+            </div>
+            <p class="sec-desc">System boundary, operational environment, user roles and characteristics, representative usage scenarios.</p>
+            <div class="visuals-list">
+              <div class="visual-chip"><span class="icon">⭕</span> Context diagram (Level 0)</div>
+              <div class="visual-chip"><span class="icon">👥</span> Stakeholder/user role map</div>
+              <div class="visual-chip"><span class="icon">📋</span> User role table</div>
+              <div class="visual-chip"><span class="icon">🔄</span> Operational scenario summary</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-row s3" onclick="show('s3', null)">
+          <div class="section-number">
+            <div class="section-num-badge">3</div>
+            <div class="section-line"></div>
+          </div>
+          <div class="section-body">
+            <div class="sec-header">
+              <h4>System Architecture Overview</h4>
+              <span class="tag tag-purple">Structure</span>
+            </div>
+            <p class="sec-desc">Overall architecture approach, identification of major subsystems, inter-subsystem relationships and data flows.</p>
+            <div class="visuals-list">
+              <div class="visual-chip"><span class="icon">🏗️</span> Functional block diagram</div>
+              <div class="visual-chip"><span class="icon">🔁</span> Data flow diagram (Level 1)</div>
+              <div class="visual-chip"><span class="icon">📋</span> Subsystem identification table</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-row s4" onclick="show('s4', null)">
+          <div class="section-number">
+            <div class="section-num-badge">4</div>
+            <div class="section-line"></div>
+          </div>
+          <div class="section-body">
+            <div class="sec-header">
+              <h4>Subsystem Decomposition &amp; Functions</h4>
+              <span class="tag tag-purple">Structure</span>
+            </div>
+            <p class="sec-desc">Description of each major subsystem, its inputs/outputs, key functions, and interfaces to other subsystems.</p>
+            <div class="visuals-list">
+              <div class="visual-chip"><span class="icon">📦</span> Subsystem detail diagrams (per subsystem)</div>
+              <div class="visual-chip"><span class="icon">↔️</span> Interface matrix (N×N)</div>
+              <div class="visual-chip"><span class="icon">📋</span> Function allocation table</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-row s5" onclick="show('s5', null)">
+          <div class="section-number">
+            <div class="section-num-badge">5</div>
+            <div class="section-line"></div>
+          </div>
+          <div class="section-body">
+            <div class="sec-header">
+              <h4>Human–System Interaction Design</h4>
+              <span class="tag tag-amber">Behavior</span>
+            </div>
+            <p class="sec-desc">Task analysis summary, interaction paradigm, information architecture, mode structure, alert/notification strategy.</p>
+            <div class="visuals-list">
+              <div class="visual-chip"><span class="icon">🔀</span> User task flow diagrams</div>
+              <div class="visual-chip"><span class="icon">🗺️</span> Information architecture diagram</div>
+              <div class="visual-chip"><span class="icon">⚙️</span> Mode transition diagram</div>
+              <div class="visual-chip"><span class="icon">🔔</span> Alert hierarchy diagram</div>
+              <div class="visual-chip"><span class="icon">📋</span> Human–function allocation table</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-row s6" onclick="show('s6', null)">
+          <div class="section-number">
+            <div class="section-num-badge">6</div>
+            <div class="section-line"></div>
+          </div>
+          <div class="section-body">
+            <div class="sec-header">
+              <h4>Interface Design Concepts</h4>
+              <span class="tag tag-red">Appearance</span>
+            </div>
+            <p class="sec-desc">Display hierarchy, conceptual wireframes/sketches of key views, navigation paradigm, design language intent.</p>
+            <div class="visuals-list">
+              <div class="visual-chip"><span class="icon">🖼️</span> Conceptual wireframes (key views)</div>
+              <div class="visual-chip"><span class="icon">🗺️</span> Navigation/screen flow diagram</div>
+              <div class="visual-chip"><span class="icon">📐</span> Display zone layout sketch</div>
+              <div class="visual-chip"><span class="icon">🎨</span> Visual language intent summary</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-row s7" onclick="show('s7', null)">
+          <div class="section-number">
+            <div class="section-num-badge">7</div>
+            <div class="section-line"></div>
+          </div>
+          <div class="section-body">
+            <div class="sec-header">
+              <h4>Key Design Decisions &amp; Rationale</h4>
+              <span class="tag tag-green">Justification</span>
+            </div>
+            <p class="sec-desc">Major architectural and interaction design choices, alternatives that were considered, and the rationale for the selections made.</p>
+            <div class="visuals-list">
+              <div class="visual-chip"><span class="icon">⚖️</span> Design decision matrix</div>
+              <div class="visual-chip"><span class="icon">📊</span> Trade study summaries (if applicable)</div>
+              <div class="visual-chip"><span class="icon">📋</span> Requirements traceability summary</div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- SECTION 1 -->
+    <div id="s1" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Section 1</div>
+        <h1>Introduction &amp; Scope</h1>
+        <p class="subtitle">Framing the document for its audience</p>
+      </div>
+
+      <div class="card accent-left">
+        <h3>Purpose of This Section</h3>
+        <p>This section is purely administrative and framing. It should be concise. Its goal is to tell the reader exactly what the document is, what it covers, and what it does not cover — before they invest time reading it.</p>
+      </div>
+
+      <div class="card">
+        <h3>What to Include</h3>
+        <ul class="styled-list">
+          <li><strong>Document purpose:</strong> One paragraph stating why this document exists and what decision it supports.</li>
+          <li><strong>Scope statement:</strong> What system functions and design aspects are covered. Explicitly state what is <em>out of scope</em>.</li>
+          <li><strong>Relationship to other documents:</strong> A short lineage table (ConOps → Requirements → this document → future SDD).</li>
+          <li><strong>Intended audience:</strong> Who this document is written for and what they are expected to do with it.</li>
+          <li><strong>Assumptions and constraints:</strong> Any assumptions made about the operational environment, hardware platform, or user population.</li>
+          <li><strong>Glossary and acronyms:</strong> Or a reference to the master acronym list.</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Typical Visual: Document Lineage Table</h3>
+        <p style="margin-bottom:12px;">A simple table showing parent/sibling documents and their relationship to this one.</p>
+        <div style="overflow-x:auto; background:var(--surface2); border-radius:8px; border:1px solid var(--border);">
+          <table class="data-table">
+            <thead><tr><th>Document</th><th>Type</th><th>Relationship</th></tr></thead>
+            <tbody>
+              <tr><td>ConOps</td><td>Parent</td><td>Defines operational intent that this design must fulfill</td></tr>
+              <tr><td>Requirements Baseline</td><td>Parent</td><td>Defines mandatory constraints this design must satisfy</td></tr>
+              <tr><td>This Document (Design Concept)</td><td>Current</td><td>Translates requirements into conceptual architecture</td></tr>
+              <tr><td>Detailed Design Spec</td><td>Child</td><td>Will refine concepts herein into build specifications</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="callout callout-amber">
+        <strong>Common mistake:</strong> PMs often over-write Section 1, turning it into a second ConOps. Keep this section under one page. If the reader needs operational background, cite the ConOps — do not repeat it.
+      </div>
+    </div>
+
+    <!-- SECTION 2 -->
+    <div id="s2" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Section 2</div>
+        <h1>Operational Context &amp; User Overview</h1>
+        <p class="subtitle">Establishing the system boundary and who operates it</p>
+      </div>
+
+      <div class="callout callout-green">
+        <strong>Why this comes second:</strong> Before describing any architecture, the reader must understand the system's external environment — what it connects to, who uses it, and under what conditions. This is the "outside" before the "inside."
+      </div>
+
+      <div class="card accent-left">
+        <h3>Context Diagram (Level 0) — First Diagram in the Document</h3>
+        <p>The context diagram is the most important figure in the entire document. It establishes the system boundary: what is inside vs. outside, and what external entities the system exchanges information with. Draw it first; write the rest of the document to explain it.</p>
+        <br/>
+        <p>For an HMI-focused document, the context diagram should show:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li>The system (as a single box)</li>
+          <li>Human users (by role) as external actors</li>
+          <li>Other systems that provide data inputs (e.g., wearable sensors, environmental systems)</li>
+          <li>Other systems that receive outputs (e.g., ground medical teams, mission control)</li>
+          <li>Labeled data/information flows on each arrow</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>User Role Table</h3>
+        <p>Immediately follow the context diagram with a table that formally defines each user role shown in it.</p>
+        <div style="overflow-x:auto; background:var(--surface2); border-radius:8px; border:1px solid var(--border); margin-top:12px;">
+          <table class="data-table">
+            <thead><tr><th>Role</th><th>Primary Tasks</th><th>Access Level</th><th>Human Factors Considerations</th></tr></thead>
+            <tbody>
+              <tr><td>Crewmember</td><td>Monitor personal health status; acknowledge alerts; initiate backups</td><td>Full operational</td><td>High workload, constrained environment, limited expert support</td></tr>
+              <tr><td>Medical Officer (Crew)</td><td>Interpret trends; generate health reports; configure thresholds</td><td>Elevated / clinical</td><td>Trained medical user; may operate under stress or fatigue</td></tr>
+              <tr><td>Ground Medical Team</td><td>Remote access; analysis; parameter adjustment</td><td>Remote / supervised</td><td>Communication latency; no direct environment access</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Operational Scenarios Summary</h3>
+        <p>List 3–6 representative operational scenarios that will drive the design. These are not full task analyses — those come in Section 5. They are concise scenario titles that allow the reader to understand the range of use cases.</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li>Nominal daily health monitoring (no alerts)</li>
+          <li>Physiological threshold exceedance — alert acknowledgement flow</li>
+          <li>Degraded mode operation (sensor failure, partial data)</li>
+          <li>Ground-supported mode — asynchronous remote access</li>
+          <li>Pre-EVA health clearance check</li>
+          <li>Emergency: sudden critical alert during high crew workload</li>
+        </ul>
+      </div>
+
+      <div class="callout callout-amber">
+        <strong>HSI-specific requirement:</strong> For human-centered systems, the user role table must include human factors considerations — not just functional access levels. Cognitive load, training background, environmental constraints, and potential stress conditions belong here.
+      </div>
+    </div>
+
+    <!-- SECTION 3 -->
+    <div id="s3" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Section 3</div>
+        <h1>System Architecture Overview</h1>
+        <p class="subtitle">Identifying major subsystems and their relationships</p>
+      </div>
+
+      <div class="callout callout-green">
+        <strong>Why this comes third:</strong> Only after the reader understands the external context (§2) can they meaningfully understand the internal structure. This section reveals what subsystems make up the system and how information flows between them.
+      </div>
+
+      <div class="card accent-left">
+        <h3>Functional Block Diagram — The Architectural Centerpiece</h3>
+        <p>The functional block diagram (FBD) is the primary architectural visual. It shows all major subsystems as labeled boxes with the information/data flows between them as arrows. Guidelines:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li>Each block = one major subsystem (not a module or component)</li>
+          <li>Arrows carry labeled data/information, not function calls</li>
+          <li>Group related subsystems visually (e.g., data acquisition layer, processing layer, presentation layer)</li>
+          <li>Keep it to 5–10 blocks; more detail belongs in §4</li>
+          <li>Use a consistent left-to-right or top-to-bottom reading direction</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>For an HMI System: Layered Architecture Description</h3>
+        <p style="margin-bottom:12px;">Software systems with significant HMI components typically organize their architecture into conceptual layers. Describe these in prose before presenting the FBD.</p>
+
+        <div class="hmi-layer">
+          <div class="hmi-layer-icon">📡</div>
+          <div class="hmi-layer-content">
+            <h5>Data Acquisition Layer</h5>
+            <p>Wearable sensors, environmental monitors, automated data collection</p>
+          </div>
+          <div class="hmi-layer-badge"><span class="tag tag-blue">Layer 1</span></div>
+        </div>
+        <div class="hmi-layer">
+          <div class="hmi-layer-icon">⚙️</div>
+          <div class="hmi-layer-content">
+            <h5>Data Processing &amp; Fusion Layer</h5>
+            <p>Signal processing, trend analysis, threshold monitoring, alert generation</p>
+          </div>
+          <div class="hmi-layer-badge"><span class="tag tag-blue">Layer 2</span></div>
+        </div>
+        <div class="hmi-layer">
+          <div class="hmi-layer-icon">🗄️</div>
+          <div class="hmi-layer-content">
+            <h5>Data Management Layer</h5>
+            <p>Storage, backup, restoration, access control, data integrity</p>
+          </div>
+          <div class="hmi-layer-badge"><span class="tag tag-blue">Layer 3</span></div>
+        </div>
+        <div class="hmi-layer">
+          <div class="hmi-layer-icon">🖥️</div>
+          <div class="hmi-layer-content">
+            <h5>Presentation &amp; Interaction Layer (HMI)</h5>
+            <p>GUI, alerting system, display management, mode control, crew interface</p>
+          </div>
+          <div class="hmi-layer-badge"><span class="tag tag-amber">Layer 4 — HMI Focus</span></div>
+        </div>
+        <div class="hmi-layer">
+          <div class="hmi-layer-icon">📡</div>
+          <div class="hmi-layer-content">
+            <h5>Communication &amp; Remote Access Layer</h5>
+            <p>Ground link, data downlink, remote access protocols</p>
+          </div>
+          <div class="hmi-layer-badge"><span class="tag tag-blue">Layer 5</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>Subsystem Identification Table</h3>
+        <p>Immediately follow the FBD with a table that formally defines each subsystem shown in it. This is the companion table to the diagram.</p>
+        <div style="overflow-x:auto; background:var(--surface2); border-radius:8px; border:1px solid var(--border); margin-top:12px;">
+          <table class="data-table">
+            <thead><tr><th>Subsystem ID</th><th>Name</th><th>Primary Function</th><th>Key Outputs to HMI</th></tr></thead>
+            <tbody>
+              <tr><td>SS-01</td><td>Physiological Data Acquisition</td><td>Collects biometric data from wearables</td><td>Raw + validated sensor data streams</td></tr>
+              <tr><td>SS-02</td><td>Environmental Monitoring</td><td>Monitors cabin atmosphere, temperature, radiation</td><td>Environmental parameter values</td></tr>
+              <tr><td>SS-03</td><td>Health Data Processing</td><td>Applies thresholds, detects anomalies, generates risk scores</td><td>Alerts, trend data, risk indicators</td></tr>
+              <tr><td>SS-04</td><td>Data Storage &amp; Management</td><td>Stores, indexes, backs up crew health records</td><td>Historical data on demand</td></tr>
+              <tr><td>SS-05</td><td>Crew Interface (HMI)</td><td>Presents data, receives crew inputs, manages displays</td><td>All crew-facing outputs</td></tr>
+              <tr><td>SS-06</td><td>Ground Access Interface</td><td>Manages remote ground-team access and data sync</td><td>Mode status, access notifications</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- SECTION 4 -->
+    <div id="s4" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Section 4</div>
+        <h1>Subsystem Decomposition &amp; Functions</h1>
+        <p class="subtitle">Drilling down into each major subsystem</p>
+      </div>
+
+      <div class="callout">
+        <strong>Structure:</strong> Repeat a consistent sub-structure for each major subsystem. This makes the document scannable and ensures completeness. A reader should be able to look up any subsystem and find the same categories of information.
+      </div>
+
+      <div class="card">
+        <h3>Recommended Per-Subsystem Sub-Structure</h3>
+        <p style="margin-bottom:10px;">For each subsystem identified in §3, provide the following in a consistent format:</p>
+        <ol class="styled-list">
+          <li><strong>Purpose and scope</strong> — 2–3 sentence description of what this subsystem does and why it exists.</li>
+          <li><strong>Key functions</strong> — Bulleted list of major functions (not implementation methods).</li>
+          <li><strong>Inputs and outputs</strong> — Table of data flows into and out of the subsystem.</li>
+          <li><strong>Interfaces to other subsystems</strong> — Which subsystems does this one depend on or serve?</li>
+          <li><strong>Design constraints</strong> — Any constraints from requirements or standards that apply specifically to this subsystem.</li>
+        </ol>
+      </div>
+
+      <div class="card accent-left">
+        <h3>Interface Matrix (N×N)</h3>
+        <p>After all subsystems are described, include a single interface matrix showing all inter-subsystem communication. This is a grid where rows and columns are subsystems, and cells indicate the type of information exchanged.</p>
+        <br/>
+        <p>This is one of the most referenced tables in the entire document. Reviewers use it to verify that no required data flows have been missed and that the architecture is internally consistent.</p>
+      </div>
+
+      <div class="card">
+        <h3>Function Allocation Table</h3>
+        <p>For HSI-focused documents, include a function allocation table that explicitly assigns each major system function to either the system (automated) or the human operator (manual), or a shared allocation. This is required under most human systems integration frameworks.</p>
+        <div style="overflow-x:auto; background:var(--surface2); border-radius:8px; border:1px solid var(--border); margin-top:12px;">
+          <table class="data-table">
+            <thead><tr><th>Function</th><th>Allocation</th><th>Rationale</th><th>Req. Reference</th></tr></thead>
+            <tbody>
+              <tr><td>Continuous data collection</td><td><span class="tag tag-blue">System (auto)</span></td><td>Continuous, background; no crew action needed</td><td>REQ-001</td></tr>
+              <tr><td>Threshold exceedance detection</td><td><span class="tag tag-blue">System (auto)</span></td><td>Faster than human response; safety critical</td><td>REQ-006</td></tr>
+              <tr><td>Alert acknowledgement</td><td><span class="tag tag-green">Human (manual)</span></td><td>Human judgment required for contextual validity</td><td>REQ-007</td></tr>
+              <tr><td>Health trend interpretation</td><td><span class="tag tag-amber">Shared</span></td><td>System provides scores; human makes final decision</td><td>REQ-005</td></tr>
+              <tr><td>Data backup initiation</td><td><span class="tag tag-amber">Shared</span></td><td>Auto backup continuous; crew can initiate on demand</td><td>REQ-010</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="callout callout-amber">
+        <strong>Common mistake:</strong> Teams often omit the function allocation table from design documents, treating it as a requirements artifact. In HSI design, it belongs here because the allocation directly drives interface complexity — anything allocated to the human requires an HMI element.
+      </div>
+    </div>
+
+    <!-- SECTION 5 -->
+    <div id="s5" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Section 5</div>
+        <h1>Human–System Interaction Design</h1>
+        <p class="subtitle">The behavioral heart of an HSI-focused document</p>
+      </div>
+
+      <div class="callout callout-green">
+        <strong>Why this is the most important section for HSI:</strong> Sections 2–4 describe <em>what</em> the system is. This section describes <em>how humans and the system exchange information and control</em>. This is where the human factors requirements (workload, situational awareness, error prevention) are first addressed at a design level.
+      </div>
+
+      <div class="card accent-left">
+        <h3>5.1 Interaction Paradigm Statement</h3>
+        <p>Before any diagrams, write a clear prose statement of the overall interaction paradigm. This is the design philosophy that unifies all interaction decisions. Examples:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li><em>"Monitoring-first, action-on-demand"</em> — the system continuously presents status passively; the crew initiates actions only when needed.</li>
+          <li><em>"Alert-driven with progressive disclosure"</em> — the primary interaction is alert acknowledgement; detailed data is one navigation step away.</li>
+          <li><em>"Tiered information density"</em> — nominal state shows minimal data; anomalies progressively surface additional context.</li>
+        </ul>
+        <br/>
+        <p>This statement should be a single paragraph that a reviewer can refer back to when evaluating every subsequent design decision.</p>
+      </div>
+
+      <div class="card">
+        <h3>5.2 User Task Flow Diagrams</h3>
+        <p>For each representative scenario identified in §2, create a user task flow diagram. Format: swimlane diagram (one lane per actor: Crew / System / Ground Team). Show:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li>Human actions as rectangles</li>
+          <li>System responses as rounded boxes</li>
+          <li>Decision points as diamonds</li>
+          <li>Information displayed to the user on arrows between system and human lanes</li>
+          <li>Time direction top-to-bottom</li>
+        </ul>
+        <div class="callout" style="margin-top:12px;">
+          <strong>Key principle:</strong> Task flow diagrams in HSI documents should show <em>information exchange</em>, not just action sequence. Every arrow from system to human lane should be labeled with what information the human receives and in what format.
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>5.3 Information Architecture Diagram</h3>
+        <p>Sometimes called a "screen hierarchy" or "display map." This diagram shows all major views/screens of the system in a hierarchical tree, with labeled navigation paths between them. It answers the question: <em>"How does a user get from anywhere to anywhere in the system?"</em></p>
+        <br/>
+        <p>For an alert-driven system, also show alert-triggered navigation paths (e.g., "from any screen → alert modal → detail view") separately from normal navigation paths.</p>
+      </div>
+
+      <div class="card">
+        <h3>5.4 Mode Transition Diagram</h3>
+        <p>A state machine diagram showing all operational modes, the events that trigger transitions between them, and the system and HMI behaviors in each mode. Required because requirements often mandate explicit mode display (as in this project's MODE VISIBILITY requirement).</p>
+        <br/>
+        <p>Modes to consider for a health monitoring system:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li><strong>Nominal Monitoring Mode</strong> — all systems functional, no active alerts</li>
+          <li><strong>Alert Mode</strong> — one or more active threshold exceedances requiring crew attention</li>
+          <li><strong>Degraded Mode</strong> — one or more sensors unavailable; system operating on partial data</li>
+          <li><strong>Ground-Supported Mode</strong> — remote access active; crew notified of ground operations</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>5.5 Alert &amp; Notification Hierarchy</h3>
+        <p>A dedicated diagram showing the alert taxonomy — priority levels, associated display behaviors (color, sound, position), and required crew actions per level. This directly supports requirements for alert prioritization and design-induced error prevention.</p>
+        <br/>
+        <p>Present as both a diagram (visual hierarchy) and a table (formal specification of behaviors per level).</p>
+      </div>
+
+      <div class="callout callout-amber">
+        <strong>HSI linkage:</strong> Every task flow diagram should end with a notation of which human performance requirements it is intended to satisfy (workload, situational awareness, error tolerance). This links behavioral design to requirements before the interface is even drawn.
+      </div>
+    </div>
+
+    <!-- SECTION 6 -->
+    <div id="s6" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Section 6</div>
+        <h1>Interface Design Concepts</h1>
+        <p class="subtitle">First visual representation of screens and layouts</p>
+      </div>
+
+      <div class="callout callout-amber">
+        <strong>Why wireframes come this late:</strong> Screens and wireframes are the output of the design decisions made in sections 2–5. Presenting them earlier — before context, architecture, and interaction behavior are established — turns them into mere visual ideas rather than justified design outcomes. A reviewer evaluating a wireframe in §6 should already know <em>why</em> it exists, from the preceding sections.
+      </div>
+
+      <div class="card accent-left">
+        <h3>6.1 Display Hierarchy &amp; Zone Layout</h3>
+        <p>Before presenting specific screen wireframes, show the conceptual display zone model — a labeled sketch of how the screen is divided into functional zones. Common zones for monitoring systems:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li><strong>Status header zone</strong> — current mode, system health, time/mission elapsed</li>
+          <li><strong>Primary data zone</strong> — the main content area for the current view</li>
+          <li><strong>Alert/notification zone</strong> — persistent area for active alerts regardless of current view</li>
+          <li><strong>Navigation zone</strong> — access to major functional areas</li>
+          <li><strong>Contextual action zone</strong> — view-specific controls and actions</li>
+        </ul>
+        <br/>
+        <p>This zone model should appear in every subsequent wireframe, confirming consistency across views.</p>
+      </div>
+
+      <div class="card">
+        <h3>6.2 Key View Wireframes / Conceptual Sketches</h3>
+        <p>Select 4–6 key views that cover the most critical or representative interaction scenarios. Do not wireframe every possible screen — only the ones that establish the design language. Required coverage:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li><strong>Home / Dashboard view</strong> — nominal state overview</li>
+          <li><strong>Alert detail view</strong> — the most critical interaction flow</li>
+          <li><strong>Historical trend view</strong> — a data-dense view establishing density conventions</li>
+          <li><strong>Mode indicator / status view</strong> — demonstrating mode visibility design</li>
+          <li><strong>Settings / configuration view</strong> (optional) — if crew-modifiable parameters are significant</li>
+        </ul>
+        <div class="callout" style="margin-top:12px;">
+          <strong>Fidelity rule:</strong> Wireframes in this document should be mid-fidelity — clear enough to communicate layout and information hierarchy, but not so detailed that reviewers debate color choices or exact button labels. Use grayscale, labeled boxes, and representative placeholder content.
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>6.3 Navigation Flow Diagram</h3>
+        <p>Complement the information architecture diagram from §5 with a navigation flow that shows the path a user takes through the most critical task flows. Unlike the information architecture (which shows all screens), this diagram shows <em>specific paths</em> for specific scenarios — highlighting which views are most central and most frequently accessed.</p>
+      </div>
+
+      <div class="card">
+        <h3>6.4 Visual Design Language Intent</h3>
+        <p>A brief summary (not a full style guide) of the visual design intentions. This establishes design language at a level sufficient for concept review:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li>Color usage intent (e.g., semantic color coding for alert levels per NASA-STD-3001)</li>
+          <li>Typography intent (e.g., high-legibility typeface for varied lighting conditions)</li>
+          <li>Iconography approach (e.g., standard labeling plan per requirements)</li>
+          <li>Information density philosophy (e.g., progressive disclosure principles)</li>
+        </ul>
+      </div>
+
+      <div class="callout callout-green">
+        <strong>Link back to requirements:</strong> Each wireframe or design language element should cite the requirement it satisfies (e.g., "Alert color coding → REQ-007 ALERT PRIORITIZATION"). This traceability transforms wireframes from design artifacts into requirement evidence.
+      </div>
+    </div>
+
+    <!-- SECTION 7 -->
+    <div id="s7" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Section 7</div>
+        <h1>Key Design Decisions &amp; Rationale</h1>
+        <p class="subtitle">Documenting trade-offs and justifying the selected approach</p>
+      </div>
+
+      <div class="callout callout-green">
+        <strong>Why this comes last:</strong> Design decisions can only be meaningfully evaluated after the reader understands the full architecture and interaction design. Placing rationale last also makes it easy to reference specific elements from §3–§6 when explaining why they were chosen.
+      </div>
+
+      <div class="card accent-left">
+        <h3>Design Decision Matrix — The Key Artifact of This Section</h3>
+        <p>The design decision matrix is a structured table capturing every significant design choice. It is the primary document of record for stakeholder review. A well-formed matrix prevents the document from becoming a justification narrative — it forces precision.</p>
+        <div style="overflow-x:auto; background:var(--surface2); border-radius:8px; border:1px solid var(--border); margin-top:12px;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>ID</th><th>Decision Topic</th><th>Option Selected</th><th>Alternatives Considered</th><th>Rationale</th><th>Req. Driver</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>DD-01</td>
+                <td>Alert display paradigm</td>
+                <td>Persistent alert bar (always visible)</td>
+                <td>Modal overlay; notification drawer; ambient indication</td>
+                <td>Persistent visibility required for situational awareness; modal overlay introduces display interruption risk during high workload tasks</td>
+                <td>REQ-005, REQ-007</td>
+              </tr>
+              <tr>
+                <td>DD-02</td>
+                <td>Mode indication approach</td>
+                <td>Full-screen header band color change + text label</td>
+                <td>Icon only; color only; separate status display panel</td>
+                <td>Color alone is insufficient per legibility requirements; combined text + color redundancy reduces error under adverse lighting</td>
+                <td>REQ-004, REQ-006</td>
+              </tr>
+              <tr>
+                <td>DD-03</td>
+                <td>Data presentation density</td>
+                <td>Progressive disclosure — summary by default, detail on demand</td>
+                <td>Maximum data display; tabbed detailed views; user-configurable layouts</td>
+                <td>Reduces nominal cognitive workload (≤ Bedford 3); preserves access to full data when needed; user-configurable layouts introduce training burden</td>
+                <td>REQ-003, REQ-005</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>What Counts as a "Significant" Decision?</h3>
+        <p>Include a decision in the matrix if it meets any of these criteria:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li>It directly affects human performance (workload, SA, error risk)</li>
+          <li>Multiple viable alternatives existed</li>
+          <li>It is driven by a specific human factors or safety requirement</li>
+          <li>A reviewer might reasonably question why another option was not chosen</li>
+          <li>It will constrain future design decisions</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>Trade Study Summaries (When Applicable)</h3>
+        <p>For decisions where quantitative comparison was performed (e.g., usability evaluation of competing navigation patterns, weighted criteria matrices), provide a brief summary of the trade study method and results. The full analysis may be in an appendix.</p>
+      </div>
+
+      <div class="card">
+        <h3>Requirements Traceability Summary</h3>
+        <p>Close the document with a summary traceability table showing how each top-level requirement is addressed by at least one design element described in the document. This is not a full requirements traceability matrix — that belongs in the formal SDD. It is a sanity check that confirms every requirement has been considered at the design concept level.</p>
+      </div>
+
+      <div class="callout callout-amber">
+        <strong>Common mistake:</strong> Teams write rationale as "we chose Option A because it is better." Professional rationale must state: <em>better with respect to what criterion, under what constraints, for which requirement</em>. Rationale without criteria is opinion.
+      </div>
+    </div>
+
+    <!-- VISUALS GUIDE -->
+    <div id="visuals" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Reference</div>
+        <h1>Visual Selection Guide</h1>
+        <p class="subtitle">Which diagram type to use, when, and why</p>
+      </div>
+
+      <div class="callout">
+        <strong>The rule of visual selection:</strong> Choose the diagram type that most directly answers the primary question a reader would ask at that point in the document. Different diagram types answer different questions.
+      </div>
+
+      <div style="overflow-x:auto; background:var(--surface2); border-radius:10px; border:1px solid var(--border);">
+        <table class="data-table">
+          <thead>
+            <tr><th>Diagram Type</th><th>Primary Question Answered</th><th>Placed In</th><th>Key Conventions</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>Context Diagram (Level 0)</td>
+              <td>"What are the system's boundaries and external connections?"</td>
+              <td>§2</td>
+              <td>System as single box; external entities as actors; labeled interface arrows</td>
+            </tr>
+            <tr>
+              <td>Stakeholder / User Role Map</td>
+              <td>"Who are the users and how are they related?"</td>
+              <td>§2</td>
+              <td>Visual network or table; group by role type; show access relationship</td>
+            </tr>
+            <tr>
+              <td>Functional Block Diagram (FBD)</td>
+              <td>"What are the major subsystems and how do data flow between them?"</td>
+              <td>§3</td>
+              <td>Labeled blocks; directional arrows with data labels; group by layer</td>
+            </tr>
+            <tr>
+              <td>Data Flow Diagram (Level 1)</td>
+              <td>"What specific data moves between subsystems?"</td>
+              <td>§3–§4</td>
+              <td>Processes as circles; data stores as open rectangles; flows as arrows</td>
+            </tr>
+            <tr>
+              <td>Interface Matrix</td>
+              <td>"Which subsystems communicate with which others?"</td>
+              <td>§4</td>
+              <td>N×N grid; cell content = data type or interface type; symmetric or directional</td>
+            </tr>
+            <tr>
+              <td>Swimlane Task Flow</td>
+              <td>"What sequence of actions/responses occurs for a given scenario?"</td>
+              <td>§5</td>
+              <td>Lanes per actor; top-to-bottom time; label information at interaction points</td>
+            </tr>
+            <tr>
+              <td>Information Architecture</td>
+              <td>"How is the display space organized and navigated?"</td>
+              <td>§5</td>
+              <td>Hierarchical tree; labeled screen names; navigation arrows between nodes</td>
+            </tr>
+            <tr>
+              <td>Mode Transition Diagram</td>
+              <td>"What modes exist and what causes transitions?"</td>
+              <td>§5</td>
+              <td>States as rounded boxes; transitions as arrows; trigger labels on arrows</td>
+            </tr>
+            <tr>
+              <td>Alert Hierarchy Diagram</td>
+              <td>"How are alerts categorized and visually differentiated?"</td>
+              <td>§5</td>
+              <td>Vertical priority ordering; color coding; associated behaviors per level</td>
+            </tr>
+            <tr>
+              <td>Display Zone Model</td>
+              <td>"How is the screen layout divided into functional areas?"</td>
+              <td>§6</td>
+              <td>Labeled screen region sketch; consistent across all view wireframes</td>
+            </tr>
+            <tr>
+              <td>Conceptual Wireframe</td>
+              <td>"What information appears in each view and how is it organized?"</td>
+              <td>§6</td>
+              <td>Mid-fidelity grayscale; labeled boxes; placeholder content; annotated</td>
+            </tr>
+            <tr>
+              <td>Navigation Flow</td>
+              <td>"How does a user traverse screens for a critical task path?"</td>
+              <td>§6</td>
+              <td>Screen thumbnails connected by labeled transition arrows</td>
+            </tr>
+            <tr>
+              <td>Design Decision Matrix</td>
+              <td>"Why were key design choices made and what was rejected?"</td>
+              <td>§7</td>
+              <td>Tabular; columns: decision, selected, alternatives, rationale, requirement</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="card" style="margin-top:20px;">
+        <h3>The Diagram Companion Rule</h3>
+        <p>Every diagram must be accompanied by either a table or a prose description that names and defines its elements. A diagram without text is ambiguous; text without a diagram is hard to visualize. The combination is always stronger than either alone.</p>
+      </div>
+
+      <div class="card">
+        <h3>When NOT to Use a Diagram</h3>
+        <ul class="styled-list">
+          <li>When the information is already captured in a table and a diagram would add no spatial or relational clarity</li>
+          <li>When there are fewer than 3 elements to show (a list is clearer)</li>
+          <li>When the diagram would require so many annotations it becomes harder to read than prose</li>
+          <li>In §1 (Introduction) — no diagrams; this section is administrative</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- HMI ADVICE -->
+    <div id="hmi" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Reference</div>
+        <h1>HMI / HSI-Specific Advice</h1>
+        <p class="subtitle">What makes a design document HSI-focused, not just technically complete</p>
+      </div>
+
+      <div class="callout callout-green">
+        <strong>The HSI difference:</strong> A technically complete design document describes <em>what the system does</em>. An HSI-complete document additionally describes <em>what the human must do, perceive, and decide</em> — and how the design supports that. The human is a subsystem and must be treated as one.
+      </div>
+
+      <div class="card accent-left">
+        <h3>1. Always Start with the Human, Not the System</h3>
+        <p>When writing any section that involves human-system interaction, write the human's task and goal <em>first</em>, then describe the system's role in supporting it. This forces the author to maintain a user-centered perspective and prevents the document from becoming technology-first.</p>
+      </div>
+
+      <div class="card">
+        <h3>2. Make Human Performance Requirements Visible in Design Sections</h3>
+        <p>Requirements for workload (Bedford ≤ 3 nominal), situational awareness (SAGAT/SART), and usability (NMSUS ≥ 85) should be cited at the point in §5 and §6 where the design addresses them — not only in the requirements document. This makes the design intent legible to evaluators.</p>
+      </div>
+
+      <div class="card">
+        <h3>3. Document the "Information Needs" Explicitly</h3>
+        <p>For each major user task, identify: <em>What information does the user need? When do they need it? In what format?</em> This is sometimes called an "information requirements analysis" and is distinct from functional requirements. It directly drives display design.</p>
+        <div style="overflow-x:auto; background:var(--surface2); border-radius:8px; border:1px solid var(--border); margin-top:12px;">
+          <table class="data-table">
+            <thead><tr><th>User Task</th><th>Information Needed</th><th>When Needed</th><th>Required Format</th><th>Source Subsystem</th></tr></thead>
+            <tbody>
+              <tr><td>Acknowledge health alert</td><td>Alert type, severity, affected parameter, current value, threshold</td><td>Immediately on alert trigger</td><td>Prioritized visual + auditory notification with numerical values</td><td>SS-03</td></tr>
+              <tr><td>Pre-EVA health clearance</td><td>All current vital signs, trend over last 24h, radiation dose, fatigue score</td><td>On-demand, within 1 min of decision</td><td>Summary dashboard with trend sparklines and clearance status</td><td>SS-03, SS-04</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>4. Address Cognitive Load Architecture, Not Just Functional Architecture</h3>
+        <p>Describe specifically how the system architecture reduces cognitive load. Examples of design elements that address cognitive load at the architectural level:</p>
+        <ul class="styled-list" style="margin-top:8px;">
+          <li><strong>Progressive disclosure:</strong> Summary data by default; detail requires explicit navigation</li>
+          <li><strong>Consistent spatial mapping:</strong> Alert information always in the same screen zone, regardless of current view</li>
+          <li><strong>Predictive indicators:</strong> Risk scores and readiness indices replace raw data interpretation burden</li>
+          <li><strong>Automated anomaly detection:</strong> The system identifies threshold exceedances; the human only evaluates flagged events</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <h3>5. Show Error Pathways, Not Just Happy Paths</h3>
+        <p>Include at least one task flow diagram showing what happens when things go wrong: a false positive alert, a degraded sensor condition, or an interrupted task. This demonstrates that the design has considered error resilience, which directly addresses design-induced error requirements.</p>
+      </div>
+
+      <div class="card">
+        <h3>6. Explicitly Address Legibility Across Operational Conditions</h3>
+        <p>For systems operating in variable environments (lighting, vibration, viewing angle), the design concept document should acknowledge legibility constraints at the conceptual level — even before specific font sizes are chosen. A statement such as "all primary status indicators shall use redundant coding (color + shape/text)" establishes a design principle that constrains all subsequent interface decisions.</p>
+      </div>
+
+      <div class="callout callout-amber">
+        <strong>NASA-STD-3001 alignment:</strong> When writing for a NASA human systems context, map your document sections to specific Volume 2 requirements areas. Reviewers will evaluate the document against the standard. If your §5 (HSI) section does not visibly address §V2 5006 (Situational Awareness), §V2 5007 (Workload), and §V2 10001 (Usability), expect review comments regardless of how technically complete the rest of the document is.
+      </div>
+    </div>
+
+    <!-- CHECKLIST -->
+    <div id="checklist" class="page">
+      <div class="page-header">
+        <div class="breadcrumb">Reference</div>
+        <h1>Document Completion Checklist</h1>
+        <p class="subtitle">Use this before submitting for stakeholder review</p>
+      </div>
+
+      <div class="two-col">
+        <div>
+          <div class="card">
+            <h3>§1 Introduction</h3>
+            <ul class="styled-list">
+              <li>Document purpose stated in ≤ 1 paragraph</li>
+              <li>Scope and out-of-scope explicitly stated</li>
+              <li>Relationship to ConOps and requirements documented</li>
+              <li>Intended audience identified</li>
+              <li>Key assumptions and constraints listed</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>§2 Operational Context</h3>
+            <ul class="styled-list">
+              <li>Context diagram (Level 0) present and labeled</li>
+              <li>All external actors identified with data flows</li>
+              <li>User role table with human factors column</li>
+              <li>Representative operational scenarios listed</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>§3 Architecture Overview</h3>
+            <ul class="styled-list">
+              <li>Architecture layering or approach described in prose first</li>
+              <li>Functional block diagram present</li>
+              <li>All subsystems labeled and identified in the FBD</li>
+              <li>Subsystem identification table accompanies FBD</li>
+              <li>Data flows labeled on diagram arrows</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>§4 Subsystem Decomposition</h3>
+            <ul class="styled-list">
+              <li>Consistent sub-structure used for each subsystem</li>
+              <li>Inputs/outputs defined per subsystem</li>
+              <li>Interface matrix included</li>
+              <li>Function allocation table (human vs. system) included</li>
+            </ul>
+          </div>
+        </div>
+        <div>
+          <div class="card">
+            <h3>§5 Human–System Interaction</h3>
+            <ul class="styled-list">
+              <li>Interaction paradigm statement written</li>
+              <li>Task flow diagrams for key scenarios (including error case)</li>
+              <li>Information architecture diagram present</li>
+              <li>Mode transition diagram covers all required modes</li>
+              <li>Alert hierarchy diagram and table present</li>
+              <li>Information needs analysis table included</li>
+              <li>Human performance requirements cited in relevant subsections</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>§6 Interface Design Concepts</h3>
+            <ul class="styled-list">
+              <li>Display zone model established before wireframes</li>
+              <li>Key view wireframes present (4–6 minimum)</li>
+              <li>Wireframes use consistent zone model</li>
+              <li>Navigation flow diagram shows critical task paths</li>
+              <li>Visual design language intent documented</li>
+              <li>Each wireframe cites the requirement it addresses</li>
+            </ul>
+          </div>
+          <div class="card">
+            <h3>§7 Design Decisions</h3>
+            <ul class="styled-list">
+              <li>Design decision matrix present with alternatives column</li>
+              <li>All rationale entries cite a requirement or criterion</li>
+              <li>Trade studies summarized where applicable</li>
+              <li>Requirements traceability summary present</li>
+            </ul>
+          </div>
+          <div class="card green-left">
+            <h3>Overall Document</h3>
+            <ul class="styled-list">
+              <li>Every diagram has a companion table or labeled prose</li>
+              <li>Top-down ordering maintained throughout</li>
+              <li>No implementation-level specifications included</li>
+              <li>Human appears as an actor in every interaction diagram</li>
+              <li>NASA-STD-3001 Vol. 2 requirements visibly addressed</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<script>
+  function show(id, navEl) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    if (navEl) {
+      navEl.classList.add('active');
+    } else {
+      const sectionNavMap = {
+        's1': 1, 's2': 2, 's3': 3, 's4': 4, 's5': 5, 's6': 6, 's7': 7
+      };
+      const idx = sectionNavMap[id];
+      if (idx !== undefined) {
+        const items = document.querySelectorAll('.nav-item');
+        // find by step badge content
+        items.forEach(item => {
+          const badge = item.querySelector('.step-badge');
+          if (badge && parseInt(badge.textContent) === idx) {
+            item.classList.add('active');
+          }
+        });
+      }
+    }
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>HMU — Integrated Health Monitoring (Prototype)</title>
+  <link rel="stylesheet" href="/assets/styles.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true">◎</span>
+        <div>
+          <h1>Health Monitoring Unit</h1>
+          <p class="subtitle">Integrated situational awareness — mock wearable &amp; environmental fusion</p>
+        </div>
+      </div>
+      <div class="header-meta">
+        <span id="crew-id" class="pill">Crew —</span>
+        <span id="mission-day" class="pill">Mission day —</span>
+        <span id="clock" class="pill mono">—</span>
+      </div>
+    </header>
+
+    <section class="mode-bar" aria-label="Operational mode">
+      <span class="mode-label">Operating mode</span>
+      <div id="mode-chips" class="mode-chips"></div>
+    </section>
+
+    <section class="controls" aria-label="Prototype controls">
+      <label class="field">
+        <span>Scenario</span>
+        <select id="scenario" title="Simulated wearable context">
+          <option value="nominal">Nominal monitoring</option>
+          <option value="exercise">Exercise</option>
+          <option value="stress">Elevated stress / workload</option>
+          <option value="sleep">Sleep period</option>
+        </select>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="ground-supported" />
+        <span>Ground-supported mode (demo)</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="demo-degraded" />
+        <span>Simulate sensor degradation</span>
+      </label>
+      <button type="button" id="refresh" class="btn">Refresh data</button>
+    </section>
+
+    <section class="scores" aria-label="Composite scores">
+      <h2 class="section-title">Daily synthesis</h2>
+      <div class="score-grid" id="score-grid"></div>
+    </section>
+
+    <div class="grid-two">
+      <section class="panel" aria-label="Wearable vitals">
+        <h2 class="section-title">Wearable — physiological</h2>
+        <div class="vital-grid" id="vital-grid"></div>
+        <p class="fineprint" id="wearable-integrity"></p>
+      </section>
+      <section class="panel" aria-label="Environment">
+        <h2 class="section-title">Habitat — environmental</h2>
+        <div class="vital-grid" id="env-grid"></div>
+        <p class="fineprint" id="env-integrity"></p>
+      </section>
+    </div>
+
+    <section class="panel chart-panel" aria-label="Trends">
+      <h2 class="section-title">Trends (last 6 hours, mock)</h2>
+      <canvas id="vitals-chart" height="120"></canvas>
+    </section>
+
+    <section class="panel alerts-panel" aria-label="Alerts and decision support">
+      <h2 class="section-title">Prioritized alerts</h2>
+      <p class="alerts-hint">Ordering: emergency → warning → caution → advisory (prototype)</p>
+      <ul id="alerts-list" class="alerts-list"></ul>
+      <p id="no-alerts" class="no-alerts hidden">No threshold exceedances. Nominal indicators.</p>
+    </section>
+
+    <footer class="footer">
+      <p>Prototype for research — not for clinical use. Units labeled per display field.</p>
+    </footer>
+  </div>
+</body>
+</html>
