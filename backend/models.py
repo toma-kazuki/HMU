@@ -56,6 +56,9 @@ class WearableSnapshot(BaseModel):
     health_score: int = Field(ge=0, le=100)
     activity_score: int = Field(ge=0, le=100)
     stress_management_score: int = Field(ge=0, le=100)
+    """Higher = better stress coping (workload tolerance)."""
+    fatigue_score: int = Field(ge=0, le=100)
+    """Fatigue resistance: higher = lower perceived fatigue / better recovery."""
     readiness_score: int = Field(ge=0, le=100)
     wearable_link_quality_pct: float
     last_sync_ago_sec: int
@@ -66,9 +69,103 @@ class EnvironmentalSnapshot(BaseModel):
     co2_unit: str = "mmHg"
     cabin_temp_c: float
     temp_unit: str = "°C"
+    cabin_humidity_pct: float
+    humidity_unit: str = "%"
     mission_cumulative_dose_msv: float
     dose_unit: str = "mSv"
 
+
+# ── Per-device models ────────────────────────────────────────────────────────
+
+class DeviceStatus(BaseModel):
+    connected: bool
+    battery_pct: int | None = None  # None = device has no battery / externally powered
+    last_sync_ago_sec: int
+    signal: Literal["ok", "stale", "lost"] = "ok"
+
+
+class BioMonitorData(BaseModel):
+    """Astroskin / Bio-Monitor smart t-shirt."""
+
+    status: DeviceStatus
+    heart_rate_bpm: float
+    resting_heart_rate_bpm: float  # lowest HR recorded at rest (past 24 h)
+    ecg_rhythm: str          # e.g. "Normal sinus", "Sinus tachycardia"
+    systolic_mmhg: float
+    diastolic_mmhg: float
+    bp_unit: str = "mmHg"
+    breathing_rate_bpm: float
+    tidal_volume_l: float    # breath volume per breath
+    skin_temp_c: float
+    temp_unit: str = "°C"
+    spo2_pct: float
+    activity_mets: float     # metabolic equivalent of task
+
+
+class OuraRingData(BaseModel):
+    """Oura ring — recovery, sleep, HRV."""
+
+    status: DeviceStatus
+    hrv_ms: float            # heart-rate variability (RMSSD)
+    body_temp_deviation_c: float  # vs personal 30-day baseline
+    sleep_deep_pct: float
+    sleep_rem_pct: float
+    sleep_light_pct: float
+    sleep_awake_pct: float
+    respiratory_rate_bpm: float
+    spo2_avg_pct: float
+    steps: int
+
+
+class ThermoMiniData(BaseModel):
+    """Thermo-mini non-invasive core body temperature sensor."""
+
+    status: DeviceStatus
+    core_body_temp_c: float
+    temp_unit: str = "°C"
+
+
+class ActiwatchData(BaseModel):
+    """Actiwatch Spectrum — activity, ambient light, sleep."""
+
+    status: DeviceStatus
+    activity_counts_per_epoch: int   # raw actigraphy counts
+    ambient_light_lux: float
+    sleep_onset_min: int             # minutes to fall asleep (last sleep period)
+    wake_episodes: int               # wake-after-sleep-onset events
+    activity_level: str              # Sedentary / Light / Moderate / Vigorous
+    hyperactivity_index: float       # 0–10 derived restlessness score
+
+
+class PersonalCO2Data(BaseModel):
+    """Personal CO₂ exposure monitor (individual, not cabin ambient)."""
+
+    status: DeviceStatus
+    current_ppm: float
+    peak_ppm: float
+    co2_unit: str = "ppm"
+
+
+class EVARMData(BaseModel):
+    """EVARM individual radiation dosimeter."""
+
+    status: DeviceStatus
+    dose_rate_usv_h: float        # current dose rate
+    rate_unit: str = "μSv/h"
+    personal_cumulative_msv: float
+    dose_unit: str = "mSv"
+
+
+class WearableDevices(BaseModel):
+    bio_monitor: BioMonitorData
+    oura_ring: OuraRingData
+    thermo_mini: ThermoMiniData
+    actiwatch: ActiwatchData
+    personal_co2: PersonalCO2Data
+    evarm: EVARMData
+
+
+# ── Integrity / payload ───────────────────────────────────────────────────────
 
 class SensorIntegrity(BaseModel):
     heart_rate: Literal["ok", "stale", "lost"]
@@ -79,12 +176,37 @@ class SensorIntegrity(BaseModel):
 class DashboardPayload(BaseModel):
     mode: OperationalMode
     crew_member_id: str
+    display_name: str = ""
     mission_day: int
     wearable: WearableSnapshot
+    devices: WearableDevices
     environmental: EnvironmentalSnapshot
     integrity: SensorIntegrity
     alerts: list[AlertItem]
     vitals_series: list[VitalSample]
+
+
+class CrewColumnSummary(BaseModel):
+    """One crew column on the multi-crew desktop overview."""
+
+    crew_member_id: str
+    display_name: str
+    role: str = ""
+    avatar_url: str
+    mode: OperationalMode
+    health_score: int = Field(ge=0, le=100)
+    sleep_score: int = Field(ge=0, le=100)
+    fatigue_score: int = Field(ge=0, le=100)
+    stress_score: int = Field(ge=0, le=100)
+    """Mapped from stress_management_score for the overview (higher = better coping)."""
+
+
+class OverviewPayload(BaseModel):
+    mission_day: int
+    mode: OperationalMode
+    crew: list[CrewColumnSummary]
+    environmental: EnvironmentalSnapshot
+    integrity_environmental: Literal["ok", "stale", "lost"] = "ok"
 
 
 class ModeOverrideBody(BaseModel):

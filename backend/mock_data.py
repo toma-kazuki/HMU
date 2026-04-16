@@ -7,12 +7,50 @@ import random
 from datetime import UTC, datetime
 
 from backend.models import (
+    ActiwatchData,
+    BioMonitorData,
+    DeviceStatus,
     EnvironmentalSnapshot,
+    EVARMData,
     OperationalMode,
+    OuraRingData,
+    PersonalCO2Data,
     SensorIntegrity,
+    ThermoMiniData,
     VitalSample,
+    WearableDevices,
     WearableSnapshot,
 )
+
+# Four-person crew for desktop overview (display names are fictional placeholders).
+CREW_ROSTER: list[dict[str, str]] = [
+    {"id": "CM-1", "display_name": "A. Okada", "role": "Commander"},
+    {"id": "CM-2", "display_name": "M. Reyes", "role": "Flight Engineer"},
+    {"id": "CM-3", "display_name": "J. Park", "role": "Mission Specialist"},
+    {"id": "CM-4", "display_name": "S. Lindqvist", "role": "Medical Officer"},
+]
+
+
+def crew_display_name(crew_member_id: str) -> str:
+    for c in CREW_ROSTER:
+        if c["id"] == crew_member_id:
+            return c["display_name"]
+    return crew_member_id
+
+
+def crew_role(crew_member_id: str) -> str:
+    for c in CREW_ROSTER:
+        if c["id"] == crew_member_id:
+            return c["role"]
+    return ""
+
+
+def avatar_url_for_crew(crew_member_id: str) -> str:
+    """Stable face-style avatar (external CDN; offline fallback in UI)."""
+    from urllib.parse import quote
+
+    seed = quote(crew_member_id, safe="")
+    return f"https://api.dicebear.com/7.x/avataaars/svg?seed={seed}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf"
 
 # Demo state toggled via API
 _ground_supported: bool = False
@@ -73,6 +111,14 @@ def build_wearable(
         sleep_score = min(100, sleep_score + 8)
         readiness = int((sleep_score * 0.4 + health_score * 0.35 + stress_mgmt * 0.25))
 
+    # Fatigue resistance: higher = less fatigue (aligned with sleep + workload proxy).
+    fatigue_load = max(0.0, 100 - readiness + rng.uniform(-8, 12))
+    if scenario == "stress":
+        fatigue_load += 15
+    if scenario == "sleep":
+        fatigue_load = max(0.0, fatigue_load - 20)
+    fatigue_resistance = int(max(0, min(100, 100 - fatigue_load * 0.85)))
+
     link = 94.0 + rng.uniform(-6, 5)
     sync_sec = rng.randint(12, 95)
 
@@ -87,9 +133,152 @@ def build_wearable(
         health_score=health_score,
         activity_score=activity_score,
         stress_management_score=stress_mgmt,
+        fatigue_score=fatigue_resistance,
         readiness_score=readiness,
         wearable_link_quality_pct=round(min(100, max(0, link)), 1),
         last_sync_ago_sec=sync_sec,
+    )
+
+
+def build_devices(
+    crew_member_id: str,
+    mission_day: int,
+    wearable: WearableSnapshot,
+    *,
+    scenario: str = "nominal",
+) -> WearableDevices:
+    """Generate per-device mock data consistent with the wearable snapshot."""
+    rng = random.Random(hash(crew_member_id + "dev") % (2**32) + mission_day)
+
+    def _dev_status(base_battery: int | None, *, always_on: bool = False) -> DeviceStatus:
+        batt: int | None = None
+        if base_battery is not None:
+            batt = max(5, min(100, base_battery + rng.randint(-10, 5)))
+        sync = rng.randint(8, 120)
+        if _demo_degraded and not always_on:
+            connected = rng.random() > 0.35
+            signal = "ok" if connected else "stale"
+        else:
+            connected = True
+            signal = "ok" if (batt is None or batt > 10) else "stale"
+        return DeviceStatus(connected=connected, battery_pct=batt, last_sync_ago_sec=sync, signal=signal)
+
+    sleeping = scenario == "sleep"
+    exercising = scenario == "exercise"
+    stressed = scenario == "stress"
+
+    # ── Bio-Monitor (t-shirt) ────────────────────────
+    hr = wearable.heart_rate_bpm
+    ecg_map = {
+        "nominal": "Normal sinus",
+        "sleep": "Normal sinus — sleep",
+        "exercise": "Sinus tachycardia",
+        "stress": "Sinus tachycardia" if hr > 100 else "Normal sinus",
+    }
+    tidal_vol = 0.5 + rng.uniform(-0.05, 0.1)
+    if exercising:
+        tidal_vol = 1.8 + rng.uniform(-0.2, 0.4)
+    mets = {"nominal": 1.4, "sleep": 0.9, "exercise": 7.5, "stress": 2.8}[scenario]
+    mets += rng.uniform(-0.2, 0.3)
+    # Resting HR is a personal physiological baseline — seeded by crew ID,
+    # not by scenario (it reflects the prior rest period, not current activity).
+    rhr_base = random.Random(hash(crew_member_id + "rhr") % (2**32)).uniform(52, 68)
+    rhr = round(rhr_base + rng.uniform(-3, 4) + (3.5 if stressed else 0), 1)
+
+    bio = BioMonitorData(
+        status=_dev_status(78),
+        heart_rate_bpm=wearable.heart_rate_bpm,
+        resting_heart_rate_bpm=round(min(rhr, wearable.heart_rate_bpm), 1),
+        ecg_rhythm=ecg_map[scenario],
+        systolic_mmhg=wearable.systolic_mmhg,
+        diastolic_mmhg=wearable.diastolic_mmhg,
+        breathing_rate_bpm=wearable.respiratory_rate_bpm,
+        tidal_volume_l=round(tidal_vol, 2),
+        skin_temp_c=wearable.skin_temp_c,
+        spo2_pct=wearable.spo2_pct,
+        activity_mets=round(mets, 1),
+    )
+
+    # ── Oura Ring ────────────────────────────────────
+    hrv_base = {"nominal": 52, "sleep": 58, "exercise": 35, "stress": 28}[scenario]
+    hrv = max(15, hrv_base + rng.uniform(-8, 10))
+    temp_dev = rng.uniform(-0.3, 0.5) + (0.4 if stressed else 0)
+    deep = rng.uniform(15, 25)
+    rem = rng.uniform(18, 26)
+    awake = rng.uniform(4, 10)
+    light = 100 - deep - rem - awake
+    oura = OuraRingData(
+        status=_dev_status(65),
+        hrv_ms=round(hrv, 1),
+        body_temp_deviation_c=round(temp_dev, 2),
+        sleep_deep_pct=round(deep, 1),
+        sleep_rem_pct=round(rem, 1),
+        sleep_light_pct=round(light, 1),
+        sleep_awake_pct=round(awake, 1),
+        respiratory_rate_bpm=round(wearable.respiratory_rate_bpm + rng.uniform(-0.5, 0.5), 1),
+        spo2_avg_pct=round(wearable.spo2_pct - rng.uniform(0, 0.5), 1),
+        steps=rng.randint(0, 300) if sleeping else rng.randint(1200, 9500) if exercising else rng.randint(3000, 7000),
+    )
+
+    # ── Thermo-mini ──────────────────────────────────
+    core_base = 37.0 + rng.uniform(-0.2, 0.3)
+    if exercising:
+        core_base += rng.uniform(0.5, 1.2)
+    if stressed:
+        core_base += rng.uniform(0.1, 0.4)
+    thermo = ThermoMiniData(
+        status=_dev_status(88),
+        core_body_temp_c=round(core_base, 2),
+    )
+
+    # ── Actiwatch Spectrum ───────────────────────────
+    act_counts = {"nominal": 1800, "sleep": 120, "exercise": 7400, "stress": 3200}[scenario]
+    act_counts = int(act_counts + rng.uniform(-300, 400))
+    lux_base = {"nominal": 220, "sleep": 0, "exercise": 350, "stress": 180}[scenario]
+    lux = max(0, lux_base + rng.uniform(-40, 60))
+    act_level = (
+        "Sedentary" if act_counts < 500
+        else "Light" if act_counts < 2500
+        else "Moderate" if act_counts < 5000
+        else "Vigorous"
+    )
+    hyperact = round(min(10, max(0, (wearable.stress_management_score / 100) * rng.uniform(1.5, 5) if stressed else rng.uniform(0.2, 2.0))), 1)
+    actiwatch = ActiwatchData(
+        status=_dev_status(72),
+        activity_counts_per_epoch=act_counts,
+        ambient_light_lux=round(lux, 1),
+        sleep_onset_min=rng.randint(0, 5) if sleeping else rng.randint(8, 32),
+        wake_episodes=rng.randint(0, 2) if sleeping else rng.randint(0, 5),
+        activity_level=act_level,
+        hyperactivity_index=hyperact,
+    )
+
+    # ── Personal CO₂ monitor ─────────────────────────
+    co2_base = {"nominal": 820, "sleep": 750, "exercise": 1350, "stress": 1050}[scenario]
+    co2_ppm = round(co2_base + rng.uniform(-80, 120), 0)
+    co2_peak = round(co2_ppm * rng.uniform(1.05, 1.25), 0)
+    personal_co2 = PersonalCO2Data(
+        status=_dev_status(91),
+        current_ppm=co2_ppm,
+        peak_ppm=co2_peak,
+    )
+
+    # ── EVARM dosimeter ──────────────────────────────
+    dose_rate = round(0.12 + rng.uniform(0, 0.22) + (0.08 if exercising else 0), 3)
+    cumulative = round(12.0 + mission_day * 1.05 + rng.uniform(0, 8), 1)
+    evarm = EVARMData(
+        status=_dev_status(None, always_on=True),
+        dose_rate_usv_h=dose_rate,
+        personal_cumulative_msv=cumulative,
+    )
+
+    return WearableDevices(
+        bio_monitor=bio,
+        oura_ring=oura,
+        thermo_mini=thermo,
+        actiwatch=actiwatch,
+        personal_co2=personal_co2,
+        evarm=evarm,
     )
 
 
@@ -97,10 +286,12 @@ def build_environmental(mission_day: int) -> EnvironmentalSnapshot:
     rng = random.Random(42 + mission_day)
     co2 = 4.2 + rng.uniform(0, 2.8) + _wave(1.1, mission_day) * 0.6
     temp = 22.5 + rng.uniform(-1.5, 2.5)
+    humidity = 55.0 + rng.uniform(-8, 10)
     dose = 12.0 + mission_day * 1.1 + rng.uniform(0, 6)
     return EnvironmentalSnapshot(
         cabin_co2_mmhg=round(max(2.0, co2), 2),
         cabin_temp_c=round(temp, 1),
+        cabin_humidity_pct=round(min(80, max(30, humidity)), 1),
         mission_cumulative_dose_msv=round(dose, 1),
     )
 
@@ -169,3 +360,17 @@ def mission_clock_context() -> tuple[str, int]:
     mission_day = (now.timetuple().tm_yday % 500) + 1
     crew = "CM-2"
     return crew, mission_day
+
+
+def mission_day_only() -> int:
+    now = datetime.now(UTC)
+    return (now.timetuple().tm_yday % 500) + 1
+
+
+def aggregate_modes(modes: list[OperationalMode]) -> OperationalMode:
+    """Mission-level mode from per-crew modes (most severe wins)."""
+    if OperationalMode.ALERT in modes:
+        return OperationalMode.ALERT
+    if OperationalMode.DEGRADED in modes:
+        return OperationalMode.DEGRADED
+    return OperationalMode.NOMINAL_MONITORING

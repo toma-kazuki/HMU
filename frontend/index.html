@@ -3,87 +3,212 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>HMU — Integrated Health Monitoring (Prototype)</title>
-  <link rel="stylesheet" href="/assets/styles.css" />
+  <title>HMU — Crew Health Dashboard</title>
+  <link rel="stylesheet" href="/assets/styles.css?v=11" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
-  <script src="/assets/app.js" defer></script>
+  <script src="/assets/app.js?v=11" defer></script>
 </head>
 <body>
   <div class="app">
-    <header class="header">
-      <div class="brand">
+
+    <!-- ── Top bar ────────────────────────────────── -->
+    <header class="top-bar">
+      <div class="top-bar-left">
         <span class="brand-mark" aria-hidden="true">◎</span>
         <div>
-          <h1>Health Monitoring Unit</h1>
-          <p class="subtitle">Integrated situational awareness — mock wearable &amp; environmental fusion</p>
+          <h1 class="app-title">Health Monitoring Unit</h1>
+          <p class="app-subtitle">Integrated crew health — four-person view</p>
         </div>
       </div>
-      <div class="header-meta">
-        <span id="crew-id" class="pill">Crew —</span>
-        <span id="mission-day" class="pill">Mission day —</span>
-        <span id="clock" class="pill mono">—</span>
+      <div class="top-bar-right">
+        <div class="meta-block">
+          <span class="meta-label">Mission day</span>
+          <span id="mission-day" class="meta-value">—</span>
+        </div>
+        <div class="meta-block">
+          <span class="meta-label">Date</span>
+          <span id="mission-date" class="meta-value mono">—</span>
+        </div>
+        <div class="meta-block">
+          <span class="meta-label">Time (UTC)</span>
+          <span id="clock" class="meta-value mono">—</span>
+        </div>
       </div>
     </header>
 
-    <section class="mode-bar" aria-label="Operational mode">
-      <span class="mode-label">Operating mode</span>
-      <div id="mode-chips" class="mode-chips"></div>
-    </section>
-
-    <section class="controls" aria-label="Prototype controls">
-      <label class="field">
-        <span>Scenario</span>
-        <select id="scenario" title="Simulated wearable context">
-          <option value="nominal">Nominal monitoring</option>
-          <option value="exercise">Exercise</option>
-          <option value="stress">Elevated stress / workload</option>
-          <option value="sleep">Sleep period</option>
-        </select>
-      </label>
-      <label class="toggle">
-        <input type="checkbox" id="ground-supported" />
-        <span>Ground-supported mode (demo)</span>
-      </label>
-      <label class="toggle">
-        <input type="checkbox" id="demo-degraded" />
-        <span>Simulate sensor degradation</span>
-      </label>
-      <button type="button" id="refresh" class="btn">Refresh data</button>
-    </section>
-
-    <section class="scores" aria-label="Composite scores">
-      <h2 class="section-title">Daily synthesis</h2>
-      <div class="score-grid" id="score-grid"></div>
-    </section>
-
-    <div class="grid-two">
-      <section class="panel" aria-label="Wearable vitals">
-        <h2 class="section-title">Wearable — physiological</h2>
-        <div class="vital-grid" id="vital-grid"></div>
-        <p class="fineprint" id="wearable-integrity"></p>
-      </section>
-      <section class="panel" aria-label="Environment">
-        <h2 class="section-title">Habitat — environmental</h2>
-        <div class="vital-grid" id="env-grid"></div>
-        <p class="fineprint" id="env-integrity"></p>
-      </section>
+    <!-- ── Mode & controls ───────────────────────── -->
+    <div class="controls-row">
+      <div class="mode-bar" aria-label="Mission mode">
+        <span class="mode-bar-label">Mode</span>
+        <div id="mode-chips" class="mode-chips"></div>
+      </div>
+      <div class="controls-right">
+        <label class="field">
+          <span>Scenario</span>
+          <select id="scenario">
+            <option value="nominal">Nominal monitoring</option>
+            <option value="exercise">Exercise</option>
+            <option value="stress">Elevated stress / workload</option>
+            <option value="sleep">Sleep period</option>
+          </select>
+        </label>
+        <label class="toggle"><input type="checkbox" id="ground-supported" /><span>Ground-supported</span></label>
+        <label class="toggle"><input type="checkbox" id="demo-degraded" /><span>Simulate degradation</span></label>
+        <button type="button" id="refresh" class="btn-refresh">⟳ Refresh</button>
+      </div>
     </div>
 
-    <section class="panel chart-panel" aria-label="Trends">
-      <h2 class="section-title">Trends (last 6 hours, mock)</h2>
-      <canvas id="vitals-chart" height="120"></canvas>
+    <!-- ── Crew columns ───────────────────────────── -->
+    <main class="crew-section" aria-label="Crew health overview">
+      <h2 class="section-eyebrow">Crew</h2>
+      <div class="crew-board" id="crew-board">
+        <!-- Populated by app.js -->
+      </div>
+    </main>
+
+    <!-- ── Habitat bar ────────────────────────────── -->
+    <section class="habitat-section" aria-label="Habitat environment">
+      <h2 class="section-eyebrow">Habitat</h2>
+      <div class="habitat-row" id="habitat-row"></div>
+      <p class="habitat-footnote" id="habitat-integrity"></p>
     </section>
 
-    <section class="panel alerts-panel" aria-label="Alerts and decision support">
-      <h2 class="section-title">Prioritized alerts</h2>
-      <p class="alerts-hint">Ordering: emergency → warning → caution → advisory (prototype)</p>
-      <ul id="alerts-list" class="alerts-list"></ul>
-      <p id="no-alerts" class="no-alerts hidden">No threshold exceedances. Nominal indicators.</p>
+    <!-- ── (1) Mission health brief ──────────────── -->
+    <section class="hmu-report-section" aria-label="Mission health brief">
+      <h2 class="section-eyebrow">Mission health brief</h2>
+      <div id="overview-report" class="hmu-report" aria-live="polite">
+        <div class="hmu-report-header">
+          <span class="hmu-report-icon">◎</span>
+          <span class="hmu-report-title">HMU Intelligence</span>
+          <span id="overview-report-ts" class="hmu-report-ts"></span>
+        </div>
+        <p id="overview-report-text" class="hmu-report-text">Generating assessment…</p>
+      </div>
     </section>
 
-    <footer class="footer">
-      <p>Prototype for research — not for clinical use. Units labeled per display field.</p>
+    <footer class="bottom-bar">
+      Prototype — not for clinical use &nbsp;·&nbsp; Click a crew card to open detailed vitals, trends, and alerts
     </footer>
-  </div>
+
+  </div><!-- /.app -->
+
+  <!-- ══ Detail modal ═══════════════════════════════ -->
+  <div id="detail-backdrop" class="detail-backdrop hidden"></div>
+  <div id="detail-panel" class="detail-panel hidden"
+       role="dialog" aria-modal="true" aria-labelledby="detail-title" tabindex="-1">
+
+    <!-- ── Modal header ──────────────────────────────── -->
+    <div class="detail-header">
+      <div class="detail-header-left">
+        <div class="detail-avatar-ring">
+          <img id="detail-avatar" class="detail-avatar-img" alt="" width="56" height="56" />
+        </div>
+        <div>
+          <h2 id="detail-title" class="detail-name">—</h2>
+          <p id="detail-role" class="detail-role-txt"></p>
+          <div id="detail-mode-chips" class="mode-chips mode-chips-sm" style="margin-top:0.3rem"></div>
+        </div>
+      </div>
+      <!-- Device status chips — compact, next to crew info -->
+      <div id="device-status-bar" class="device-status-bar" aria-label="Device connection and battery"></div>
+      <button type="button" id="detail-close" class="btn-close" aria-label="Close">×</button>
+    </div>
+
+    <div class="detail-body">
+
+      <!-- (2) Crew health summary report -->
+      <div id="crew-report" class="hmu-report hmu-report-crew" aria-live="polite">
+        <div class="hmu-report-header">
+          <span class="hmu-report-icon">◎</span>
+          <span class="hmu-report-title">HMU Intelligence — Crew Summary</span>
+          <span id="crew-report-ts" class="hmu-report-ts"></span>
+        </div>
+        <p id="crew-report-text" class="hmu-report-text">Generating assessment…</p>
+      </div>
+
+      <!-- 1. Six synthesized score cards — PRIMARY VIEW (always visible) -->
+      <section class="detail-block" aria-label="Synthesized health scores">
+        <p class="score-hint">Select a score to see its trend and relevant sensors</p>
+        <div class="detail-score-grid" id="detail-score-grid"></div>
+      </section>
+
+      <!-- 2. Score detail panel — shown only after clicking a score card -->
+      <section id="score-detail-panel" class="score-detail-panel hidden" aria-live="polite">
+        <div class="score-detail-header">
+          <div>
+            <span id="sdp-label" class="sdp-label">—</span>
+            <span id="sdp-desc"  class="sdp-desc"></span>
+          </div>
+          <div class="sdp-header-actions">
+            <!-- Time-scale toggle -->
+            <div class="sdp-scale-group" role="group" aria-label="Time scale">
+              <button class="sdp-scale-btn active" data-scale="day"   aria-pressed="true">Daily</button>
+              <button class="sdp-scale-btn"         data-scale="week"  aria-pressed="false">Weekly</button>
+              <button class="sdp-scale-btn"         data-scale="month" aria-pressed="false">Monthly</button>
+            </div>
+            <button type="button" id="sdp-close" class="sdp-close-btn" aria-label="Close detail">↑ Close</button>
+          </div>
+        </div>
+        <!-- Trend chart -->
+        <div class="chart-wrap chart-wrap-sm">
+          <canvas id="score-chart"></canvas>
+        </div>
+        <!-- Relevant sensors (populated per score) -->
+        <div id="sdp-sensors" class="sdp-sensors"></div>
+        <!-- (3) Score-specific assessment report -->
+        <div id="score-report" class="hmu-report hmu-report-score" aria-live="polite">
+          <div class="hmu-report-header">
+            <span class="hmu-report-icon">◎</span>
+            <span class="hmu-report-title">HMU Intelligence — Score Assessment</span>
+          </div>
+          <p id="score-report-text" class="hmu-report-text"></p>
+        </div>
+      </section>
+
+      <!-- 3. Habitat environmental — always visible, compact -->
+      <section class="detail-panel-card" aria-label="Habitat environment">
+        <h3 class="detail-block-title">Habitat — environmental</h3>
+        <div class="vital-grid" id="detail-env-grid"></div>
+        <p class="fineprint" id="detail-env-integrity"></p>
+      </section>
+
+      <!-- 4. Alerts — always visible -->
+      <section class="detail-panel-card" aria-label="Prioritized alerts">
+        <h3 class="detail-block-title">Alerts</h3>
+        <p class="alerts-hint">Emergency → Warning → Caution → Advisory</p>
+        <ul id="detail-alerts-list" class="alerts-list"></ul>
+        <p id="detail-no-alerts" class="no-alerts hidden">No threshold exceedances — nominal.</p>
+      </section>
+
+      <!-- 5. Crew communication chat -->
+      <section class="detail-panel-card chat-section" aria-label="Crew communication">
+        <div class="chat-header-row">
+          <h3 class="detail-block-title" style="margin:0">Communication</h3>
+          <div class="chat-recipient-bar" role="group" aria-label="Message recipient">
+            <button class="chat-recipient-btn active" data-recipient="ai" aria-pressed="true">
+              <span class="chat-recip-dot chat-recip-dot-ai"></span>System AI
+            </button>
+            <button class="chat-recipient-btn" data-recipient="surgeon" aria-pressed="false">
+              <span class="chat-recip-dot chat-recip-dot-surgeon"></span>Flight Surgeon
+              <span class="chat-recip-hint">~5 min</span>
+            </button>
+          </div>
+        </div>
+        <!-- Message thread -->
+        <div id="chat-messages" class="chat-messages" role="log" aria-live="polite" aria-label="Message thread"></div>
+        <!-- Input row -->
+        <div class="chat-input-row">
+          <textarea id="chat-input" class="chat-input" rows="2"
+            placeholder="Type a question or self-report…" aria-label="Message input"></textarea>
+          <div class="chat-action-btns">
+            <button type="button" id="chat-send"  class="chat-send-btn"  aria-label="Send message">Send ▶</button>
+            <button type="button" id="chat-clear" class="chat-clear-btn" aria-label="Clear conversation">Clear</button>
+          </div>
+        </div>
+      </section>
+
+    </div><!-- /.detail-body -->
+  </div><!-- /.detail-panel -->
+
 </body>
 </html>
