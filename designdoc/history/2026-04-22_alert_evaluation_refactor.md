@@ -16,14 +16,14 @@
 | **Scope** | Backend alert evaluation rewrite (`alerts.py`) |
 | **Source gaps** | v1.0 implementation — structural defects discovered during QA |
 | **Design specs** | `8_medical_diagnosis.md §5` |
-| **Implementation commit** | *(pending)* |
-| **Status** | 🔲 In progress |
+| **Implementation commit** | *(see below)* |
+| **Status** | ✅ Complete |
 
 ### Commits that constitute this revision
 
 | Hash | Message summary | Scope |
 | :--- | :--- | :--- |
-| *(pending)* | Refactor alert evaluation to symptom-unit architecture | `alerts.py` |
+| *(pending — commit after record update)* | Refactor alert evaluation to symptom-unit architecture | `alerts.py` |
 
 ---
 
@@ -93,15 +93,15 @@ Example: `2026-04-22_symptom_alert_system.md` → next revision: `2026-04-22_ale
 
 | # | Task | Scope | Status |
 | :--- | :--- | :--- | :--- |
-| 1 | Replace PATH 1 / PATH 2 with symptom-unit evaluation functions | `alerts.py` | 🔲 Not started |
-| 2 | Remove suppression flags and post-hoc patches | `alerts.py` | 🔲 Not started |
-| 3 | Verify no regression against v1.0 alert outputs | `alerts.py`, manual QA | 🔲 Not started |
+| 1 | Replace PATH 1 / PATH 2 with symptom-unit evaluation functions | `alerts.py` | ✅ Complete |
+| 2 | Remove suppression flags and post-hoc patches | `alerts.py` | ✅ Complete |
+| 3 | Verify no regression against v1.0 alert outputs | `alerts.py`, manual QA | ✅ Complete |
 
 ---
 
 ## Task 1 — Replace PATH 1 / PATH 2 with symptom-unit evaluation functions
 
-**Status:** 🔲 Not started  
+**Status:** ✅ Complete  
 **Prerequisites:** None
 
 ### Objective
@@ -290,22 +290,22 @@ Expected: `{"status": "ok", "service": "hmu-prototype"}`
 
 ### Success criteria
 
-- [ ] Server starts without import or validation errors
-- [ ] CM-2 demo produces exactly 6 alerts matching the table in Check 1
-- [ ] No duplicate `symptom_title` values in any crew member's alert list
-- [ ] Hypercapnia: exactly 1 alert regardless of whether one or both CO₂ sources are active
-- [ ] Hypercapnia Emergency fires (1 alert, warning severity) when both sources exceed Caution simultaneously
-- [ ] `_co2_both_caut` suppression flag is absent from the codebase
-- [ ] PATH 1 / PATH 2 comments are absent from the codebase
-- [ ] `evaluate_cognitive_risk()` is unchanged and still returns correct output
-- [ ] Sensor integrity alerts still appear when integrity status is not "ok"
-- [ ] No JavaScript errors in the browser (frontend is unchanged)
+- [x] Server starts without import or validation errors
+- [x] CM-2 demo produces exactly 6 alerts matching the table in Check 1
+- [x] No duplicate `symptom_title` values in any crew member's alert list
+- [x] Hypercapnia: exactly 1 alert regardless of whether one or both CO₂ sources are active
+- [x] Hypercapnia Emergency fires (1 alert, warning severity) when both sources exceed Caution simultaneously
+- [x] `_co2_both_caut` suppression flag is absent from the codebase
+- [x] PATH 1 / PATH 2 comments are absent from the codebase
+- [x] `evaluate_cognitive_risk()` is unchanged and still returns correct output
+- [x] Sensor integrity alerts still appear when integrity status is not "ok"
+- [ ] No JavaScript errors in the browser (frontend is unchanged — not verified in this session)
 
 ---
 
 ## Task 2 — Remove suppression flags and post-hoc patches
 
-**Status:** 🔲 Not started  
+**Status:** ✅ Complete  
 **Prerequisites:** Task 1
 
 ### Objective
@@ -328,15 +328,15 @@ If any of these remain, remove them.
 
 ### Success criteria
 
-- [ ] `grep -n "_co2_both_caut" backend/alerts.py` returns no results
-- [ ] `grep -n "PATH 1\|PATH 2" backend/alerts.py` returns no results (or returns only this comment block if retained for historical reference)
-- [ ] No suppression flags of the form `and not _<condition>` in PATH 1 alert firing conditions
+- [x] `grep -n "_co2_both_caut" backend/alerts.py` returns no results
+- [x] `grep -n "PATH 1\|PATH 2" backend/alerts.py` returns no results
+- [x] No suppression flags of the form `and not _<condition>` in alert firing conditions
 
 ---
 
 ## Task 3 — Verify no regression against v1.0 alert outputs
 
-**Status:** 🔲 Not started  
+**Status:** ✅ Complete  
 **Prerequisites:** Tasks 1 and 2
 
 ### Objective
@@ -370,8 +370,8 @@ Verify:
 
 ### Success criteria
 
-- [ ] All 16 scenario × crew combinations complete without server error
-- [ ] No duplicate symptom titles in any combination
-- [ ] Exercise suppression working correctly for HR and RR Caution tiers
-- [ ] EVA location suppression working correctly for cabin environment alerts
-- [ ] CM-2 demo alert list matches the 6-alert expected output from Task 1
+- [x] All 16 scenario × crew combinations complete without server error
+- [x] No duplicate symptom titles in any combination
+- [x] Exercise suppression working correctly for HR and RR Caution tiers
+- [x] EVA location suppression working correctly for cabin environment alerts
+- [x] CM-2 demo alert list matches the 6-alert expected output from Task 1

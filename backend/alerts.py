@@ -1,10 +1,10 @@
 """Alert evaluation — threshold checks aligned with 8_medical_diagnosis.md §5.
 
-Evaluation paths:
-  Path 1 — Single-parameter threshold (PARAM_LIMITS): exercise suppression applies here only.
-  Path 2 — Composite Emergency (multi-field AND conditions): never suppressed.
-  Path 3 — Conditional label selection (Fever vs Hyperthermia §5.7 / §5.8b).
-  Path 4 — Score-based composite §5.10: does not generate AlertItem; see evaluate_cognitive_risk().
+Each symptom is evaluated exactly once by a dedicated _evaluate_*() function.
+Each function returns exactly 0 or 1 AlertItem — the highest matching tier.
+Emergency tiers are severity upgrades of the same symptom, not separate events.
+
+§5.10 score-based composite does not generate AlertItem; see evaluate_cognitive_risk().
 """
 
 from __future__ import annotations
@@ -431,6 +431,387 @@ def _make_alert(
     )
 
 
+# ── Per-symptom evaluation functions ─────────────────────────────────────────
+# Each function evaluates one symptom and returns exactly 0 or 1 AlertItem.
+# Conditions are checked highest tier first; return on first match.
+# All functions share this signature:
+#   _evaluate_*(hr, rr, spo2, sbp, core_t, pco2, co2_mmhg, dose, env,
+#               devices, exercising, in_habitat) -> AlertItem | None
+
+def _evaluate_hypoxaemia(
+    hr, rr, spo2, devices, env,
+) -> "AlertItem | None":
+    """§5.1 — Emergency when SpO₂ < 92 AND HR > 130 AND RR > 20; else Warning < 92; Caution < 94."""
+    if spo2 < 92 and hr > 130 and rr > 20:
+        return _make_alert(
+            "spo2-emerg", "spo2_low", "emergency", AlertSeverity.WARNING,
+            "Hypoxaemia (low blood oxygen)",
+            "Hypoxaemia + tachycardia + tachypnoea simultaneously — escalate to decompensation protocol.",
+            "Bio-Monitor (SpO₂)", "SpO₂", f"{spo2:.1f} %", "< 92 % + HR > 130 + RR > 20",
+            devices, env,
+        )
+    if spo2 < 92:
+        return _make_alert(
+            "spo2-warn", "spo2_low", "warning", AlertSeverity.WARNING,
+            "Hypoxaemia (low blood oxygen)",
+            "Marked drop in SpO₂; follow medical protocol.",
+            "Bio-Monitor (SpO₂)", "SpO₂", f"{spo2:.1f} %", "< 92 %",
+            devices, env,
+        )
+    if spo2 < 94:
+        return _make_alert(
+            "spo2-caut", "spo2_low", "caution", AlertSeverity.CAUTION,
+            "Hypoxaemia (low blood oxygen)",
+            "SpO₂ below normal; monitor and notify Flight Surgeon.",
+            "Bio-Monitor (SpO₂)", "SpO₂", f"{spo2:.1f} %", "< 94 %",
+            devices, env,
+        )
+    return None
+
+
+def _evaluate_hypercapnia(
+    pco2, co2_mmhg, devices, env, in_habitat,
+) -> "AlertItem | None":
+    """§5.2 — Emergency when both sources elevated; Warning if either at high tier; Caution otherwise."""
+    cabin_warn = in_habitat and co2_mmhg > 8
+    cabin_caut = in_habitat and co2_mmhg > 6
+    pers_warn  = pco2 > 2500
+    pers_caut  = pco2 > 1000
+    both_caut  = cabin_caut and pers_caut
+
+    if both_caut and not (cabin_warn or pers_warn):
+        # Both sources at Caution simultaneously → Emergency (severity upgrade per §5.2)
+        _src = "Environmental & Personal CO₂ monitors"
+        _par = "Cabin CO₂ / Personal CO₂"
+        _val = f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm"
+        return _make_alert(
+            "co2-emerg", "cabin_co2_high", "emergency", AlertSeverity.WARNING,
+            "Hypercapnia (high CO₂)",
+            "Both cabin and personal CO₂ elevated simultaneously — severity upgraded.",
+            _src, _par, _val, "Cabin CO₂ > 6 mmHg AND Personal CO₂ > 1 000 ppm",
+            devices, env,
+        )
+    if cabin_warn or pers_warn:
+        _src = "Environmental & Personal CO₂ monitors" if cabin_warn and pers_warn \
+               else ("Environmental monitor" if cabin_warn else "Personal CO₂ monitor")
+        _par = "Cabin CO₂ / Personal CO₂" if cabin_warn and pers_warn \
+               else ("Cabin CO₂" if cabin_warn else "Personal CO₂")
+        _val = f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm" if cabin_warn and pers_warn \
+               else (f"{co2_mmhg:.2f} mmHg" if cabin_warn else f"{pco2:.0f} ppm")
+        return _make_alert(
+            "co2-warn", "cabin_co2_high", "warning", AlertSeverity.WARNING,
+            "Hypercapnia (high CO₂)",
+            "CO₂ at Warning level; initiate scrubber recovery and improve ventilation immediately.",
+            _src, _par, _val, "> 8 mmHg or > 2 500 ppm",
+            devices, env,
+        )
+    if cabin_caut or pers_caut:
+        _src = "Environmental monitor" if cabin_caut and not pers_caut \
+               else ("Personal CO₂ monitor" if pers_caut and not cabin_caut \
+               else "Environmental & Personal CO₂ monitors")
+        _par = "Cabin CO₂" if cabin_caut and not pers_caut \
+               else ("Personal CO₂" if pers_caut and not cabin_caut else "Cabin CO₂ / Personal CO₂")
+        _val = f"{co2_mmhg:.2f} mmHg" if cabin_caut and not pers_caut \
+               else (f"{pco2:.0f} ppm" if pers_caut and not cabin_caut \
+               else f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm")
+        return _make_alert(
+            "co2-caut", "cabin_co2_high", "caution", AlertSeverity.CAUTION,
+            "Hypercapnia (high CO₂)",
+            "CO₂ levels elevated; move to better-ventilated area and notify Flight Surgeon.",
+            _src, _par, _val, "> 6 mmHg or > 1 000 ppm",
+            devices, env,
+        )
+    return None
+
+
+def _evaluate_heart_rate(
+    hr, sbp, devices, env, exercising,
+) -> "AlertItem | None":
+    """§5.3 Tachycardia / §5.4 Bradycardia — mutually exclusive; highest tier wins."""
+    # Tachycardia path
+    if hr > 130:
+        return _make_alert(
+            "hr-tachy-warn", "heart_rate_high", "warning", AlertSeverity.WARNING,
+            "Tachycardia (fast heart rate)",
+            "Sustained high HR at rest; prompt assessment required.",
+            "Bio-Monitor (ECG/PPG)", "Heart rate", f"{hr:.0f} bpm", "> 130 bpm",
+            devices, env,
+        )
+    if hr > 120 and not exercising:
+        return _make_alert(
+            "hr-tachy-caut", "heart_rate_high", "caution", AlertSeverity.CAUTION,
+            "Tachycardia (fast heart rate)",
+            "Heart rate elevated for resting context.",
+            "Bio-Monitor (ECG/PPG)", "Heart rate", f"{hr:.0f} bpm", "> 120 bpm (rest)",
+            devices, env,
+        )
+    # Bradycardia path — §5.4 Emergency when HR < 40 AND SBP < 90
+    if hr < 40 and sbp < 90:
+        return _make_alert(
+            "hr-brady-emerg", "heart_rate_low", "emergency", AlertSeverity.WARNING,
+            "Bradycardia (slow heart rate)",
+            "Bradycardia + hypotension — follow cardiovascular emergency protocol.",
+            "Bio-Monitor", "Heart rate", f"{hr:.0f} bpm", "< 40 bpm AND SBP < 90 mmHg",
+            devices, env,
+        )
+    if hr < 40:
+        return _make_alert(
+            "hr-brady-warn", "heart_rate_low", "warning", AlertSeverity.WARNING,
+            "Bradycardia (slow heart rate)",
+            "Very low HR; assess hemodynamics and ECG immediately.",
+            "Bio-Monitor", "Heart rate", f"{hr:.0f} bpm", "< 40 bpm",
+            devices, env,
+        )
+    if hr < 45:
+        return _make_alert(
+            "hr-brady-caut", "heart_rate_low", "caution", AlertSeverity.CAUTION,
+            "Bradycardia (slow heart rate)",
+            "HR below normal; compare to personal baseline and check ECG rhythm.",
+            "Bio-Monitor", "Heart rate", f"{hr:.0f} bpm", "< 45 bpm",
+            devices, env,
+        )
+    return None
+
+
+def _evaluate_blood_pressure(
+    sbp, hr, spo2, devices, env,
+) -> "AlertItem | None":
+    """§5.5a Hypertension / §5.5b Hypotension — mutually exclusive; highest tier wins."""
+    # Hypertension path
+    if sbp > 170:
+        return _make_alert(
+            "bp-hyper-warn", "systolic_high", "warning", AlertSeverity.WARNING,
+            "Hypertension (high blood pressure)",
+            "Severe hypertension; risk of hypertensive crisis.",
+            "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "> 170 mmHg",
+            devices, env,
+        )
+    if sbp > 160:
+        return _make_alert(
+            "bp-hyper-caut", "systolic_high", "caution", AlertSeverity.CAUTION,
+            "Hypertension (high blood pressure)",
+            "Systolic BP elevated above operational band.",
+            "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "> 160 mmHg",
+            devices, env,
+        )
+    # Hypotension path — §5.5b Emergency when SBP < 90 AND HR > 120 AND SpO₂ < 94
+    if sbp < 90 and hr > 120 and spo2 < 94:
+        return _make_alert(
+            "bp-hypo-emerg", "systolic_low", "emergency", AlertSeverity.WARNING,
+            "Hypotension (low blood pressure)",
+            "Hypotension + tachycardia + desaturation — escalate to §5.6 protocol.",
+            "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "< 90 mmHg AND HR > 120 AND SpO₂ < 94",
+            devices, env,
+        )
+    if sbp < 80:
+        return _make_alert(
+            "bp-hypo-warn", "systolic_low", "warning", AlertSeverity.WARNING,
+            "Hypotension (low blood pressure)",
+            "Significant hypotension; organ perfusion compromised.",
+            "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "< 80 mmHg",
+            devices, env,
+        )
+    if sbp < 90:
+        return _make_alert(
+            "bp-hypo-caut", "systolic_low", "caution", AlertSeverity.CAUTION,
+            "Hypotension (low blood pressure)",
+            "Low BP; check posture, hydration, and hemodynamic signs.",
+            "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "< 90 mmHg",
+            devices, env,
+        )
+    return None
+
+
+def _evaluate_cardiovascular_decompensation(
+    hr, sbp, spo2, devices, env,
+) -> "AlertItem | None":
+    """§5.6 — Emergency-only composite; distinct clinical label from Hypotension."""
+    if hr > 120 and sbp < 90 and spo2 < 94:
+        return _make_alert(
+            "composite-cardio-decomp", "cardiovascular_decompensation", "emergency", AlertSeverity.WARNING,
+            SYMPTOM_MAP["cardiovascular_decompensation"]["symptom_title"],
+            "Tachycardia + hypotension + desaturation simultaneously — life-threatening pattern.",
+            "Bio-Monitor (composite)", None, None, "HR > 120 AND SBP < 90 AND SpO₂ < 94",
+            devices, env,
+        )
+    return None
+
+
+def _evaluate_core_temp(
+    core_t, hr, rr, devices, env,
+) -> "AlertItem | None":
+    """§5.7 Fever / §5.8a Hypothermia / §5.8b Hyperthermia — label selected by HR/RR at high-temp tiers."""
+    if core_t > 38.0:
+        condition_key = "core_temp_high_fever" if (hr > 100 or rr > 18) else "core_temp_high_hyperthermia"
+        return _make_alert(
+            "core-temp-hi-warn", condition_key, "warning", AlertSeverity.WARNING,
+            SYMPTOM_MAP[condition_key]["symptom_title"],
+            "Core body temperature at Warning level.",
+            "Thermo-mini", "Core body temperature", f"{core_t:.2f} °C", "> 38.0 °C",
+            devices, env,
+        )
+    if core_t > 37.5:
+        condition_key = "core_temp_high_fever" if (hr > 100 or rr > 18) else "core_temp_high_hyperthermia"
+        return _make_alert(
+            "core-temp-hi-caut", condition_key, "caution", AlertSeverity.CAUTION,
+            SYMPTOM_MAP[condition_key]["symptom_title"],
+            "Core body temperature elevated above normal.",
+            "Thermo-mini", "Core body temperature", f"{core_t:.2f} °C", "> 37.5 °C",
+            devices, env,
+        )
+    if core_t < 35.0:
+        return _make_alert(
+            "core-temp-lo-warn", "core_temp_low", "warning", AlertSeverity.WARNING,
+            "Hypothermia risk (body temperature low)",
+            "Significant hypothermia; begin active rewarming immediately.",
+            "Thermo-mini", "Core body temperature", f"{core_t:.2f} °C", "< 35.0 °C",
+            devices, env,
+        )
+    if core_t < 36.0:
+        return _make_alert(
+            "core-temp-lo-caut", "core_temp_low", "caution", AlertSeverity.CAUTION,
+            "Hypothermia risk (body temperature low)",
+            "Core temp below normal; check cabin temp and provide insulation.",
+            "Thermo-mini", "Core body temperature", f"{core_t:.2f} °C", "< 36.0 °C",
+            devices, env,
+        )
+    return None
+
+
+def _evaluate_breathing_rate(
+    rr, devices, env, exercising,
+) -> "AlertItem | None":
+    """§5.9a Tachypnoea / §5.9b Bradypnoea — mutually exclusive; highest tier wins."""
+    if rr > 24:
+        return _make_alert(
+            "rr-tachy-warn", "breathing_rate_high", "warning", AlertSeverity.WARNING,
+            "Tachypnoea (fast breathing rate)",
+            "Marked respiratory distress; identify and address the primary driver.",
+            "Bio-Monitor", "Breathing rate", f"{rr:.0f} br/min", "> 24 br/min",
+            devices, env,
+        )
+    if rr > 20 and not exercising:
+        return _make_alert(
+            "rr-tachy-caut", "breathing_rate_high", "caution", AlertSeverity.CAUTION,
+            "Tachypnoea (fast breathing rate)",
+            "Elevated RR at rest; check SpO₂, CO₂, and core temperature.",
+            "Bio-Monitor", "Breathing rate", f"{rr:.0f} br/min", "> 20 br/min (rest)",
+            devices, env,
+        )
+    if rr < 8:
+        return _make_alert(
+            "rr-brady-warn", "breathing_rate_low", "warning", AlertSeverity.WARNING,
+            "Bradypnoea (slow breathing rate)",
+            "Severely reduced rate; risk of CO₂ retention and hypoxaemia.",
+            "Bio-Monitor", "Breathing rate", f"{rr:.0f} br/min", "< 8 br/min",
+            devices, env,
+        )
+    if rr < 10:
+        return _make_alert(
+            "rr-brady-caut", "breathing_rate_low", "caution", AlertSeverity.CAUTION,
+            "Bradypnoea (slow breathing rate)",
+            "Low RR; confirm consciousness and check SpO₂.",
+            "Bio-Monitor", "Breathing rate", f"{rr:.0f} br/min", "< 10 br/min",
+            devices, env,
+        )
+    return None
+
+
+def _evaluate_radiation(dose, devices, env) -> "AlertItem | None":
+    """§5.11 — Warning > 150 mSv; Caution > 50 mSv."""
+    if dose > 150:
+        return _make_alert(
+            "radiation-warn", "mission_dose_high", "warning", AlertSeverity.WARNING,
+            "Cumulative radiation dose — monitoring milestone reached",
+            "High cumulative dose; review EVA schedule and dose budget.",
+            "Dosimeter (mission cumulative)", "Cumulative dose", f"{dose:.1f} mSv", "> 150 mSv",
+            devices, env,
+        )
+    if dose > 50:
+        return _make_alert(
+            "radiation-caut", "mission_dose_high", "caution", AlertSeverity.CAUTION,
+            "Cumulative radiation dose — monitoring milestone reached",
+            "Track dose against mission limits (ALARA).",
+            "Dosimeter (mission cumulative)", "Cumulative dose", f"{dose:.1f} mSv", "> 50 mSv",
+            devices, env,
+        )
+    return None
+
+
+def _evaluate_cabin_temp(env, devices) -> "AlertItem | None":
+    """§5.12a — IVA only; caller must gate on in_habitat."""
+    if env.cabin_temp_c > 27:
+        return _make_alert(
+            "cabin-temp-hot-warn", "cabin_temp_hot", "warning", AlertSeverity.WARNING,
+            "Cabin temperature — too warm",
+            "Thermal stress risk; reduce heat sources immediately.",
+            "Environmental monitor", "Cabin temperature", f"{env.cabin_temp_c:.1f} °C", "> 27 °C",
+            devices, env,
+        )
+    if env.cabin_temp_c > 26:
+        return _make_alert(
+            "cabin-temp-hot-caut", "cabin_temp_hot", "caution", AlertSeverity.CAUTION,
+            "Cabin temperature — too warm",
+            "Cabin above comfort range; adjust HVAC.",
+            "Environmental monitor", "Cabin temperature", f"{env.cabin_temp_c:.1f} °C", "> 26 °C",
+            devices, env,
+        )
+    if env.cabin_temp_c < 18:
+        return _make_alert(
+            "cabin-temp-cold-warn", "cabin_temp_cold", "warning", AlertSeverity.WARNING,
+            "Cabin temperature — too cold",
+            "Hypothermia risk; provide insulation and activate heating.",
+            "Environmental monitor", "Cabin temperature", f"{env.cabin_temp_c:.1f} °C", "< 18 °C",
+            devices, env,
+        )
+    if env.cabin_temp_c < 19:
+        return _make_alert(
+            "cabin-temp-cold-caut", "cabin_temp_cold", "caution", AlertSeverity.CAUTION,
+            "Cabin temperature — too cold",
+            "Cabin below comfort range; adjust HVAC.",
+            "Environmental monitor", "Cabin temperature", f"{env.cabin_temp_c:.1f} °C", "< 19 °C",
+            devices, env,
+        )
+    return None
+
+
+def _evaluate_cabin_humidity(env, devices) -> "AlertItem | None":
+    """§5.12b — IVA only; caller must gate on in_habitat."""
+    if env.cabin_humidity_pct > 75:
+        return _make_alert(
+            "cabin-hum-hi-warn", "cabin_humidity_high", "warning", AlertSeverity.WARNING,
+            "Cabin humidity — too high",
+            "Condensation and pathogen risk; activate dehumidifier.",
+            "Environmental monitor", "Cabin humidity", f"{env.cabin_humidity_pct:.1f} %", "> 75 %",
+            devices, env,
+        )
+    if env.cabin_humidity_pct > 70:
+        return _make_alert(
+            "cabin-hum-hi-caut", "cabin_humidity_high", "caution", AlertSeverity.CAUTION,
+            "Cabin humidity — too high",
+            "Elevated humidity; check moisture sources.",
+            "Environmental monitor", "Cabin humidity", f"{env.cabin_humidity_pct:.1f} %", "> 70 %",
+            devices, env,
+        )
+    if env.cabin_humidity_pct < 25:
+        return _make_alert(
+            "cabin-hum-lo-warn", "cabin_humidity_low", "warning", AlertSeverity.WARNING,
+            "Cabin humidity — too low",
+            "Very low humidity; mucosal defences impaired.",
+            "Environmental monitor", "Cabin humidity", f"{env.cabin_humidity_pct:.1f} %", "< 25 %",
+            devices, env,
+        )
+    if env.cabin_humidity_pct < 30:
+        return _make_alert(
+            "cabin-hum-lo-caut", "cabin_humidity_low", "caution", AlertSeverity.CAUTION,
+            "Cabin humidity — too low",
+            "Dry habitat; advise increased fluid intake.",
+            "Environmental monitor", "Cabin humidity", f"{env.cabin_humidity_pct:.1f} %", "< 30 %",
+            devices, env,
+        )
+    return None
+
+
 def evaluate_alerts(
     w: WearableSnapshot,
     env: EnvironmentalSnapshot,
@@ -441,432 +822,49 @@ def evaluate_alerts(
     location: str = "iva",
     devices: WearableDevices | None = None,
 ) -> list[AlertItem]:
-    """Evaluate all alert paths and return sorted AlertItem list.
+    """Evaluate all symptoms and return a severity-sorted AlertItem list.
 
-    Path 1 — Single-parameter threshold (PARAM_LIMITS): exercise suppression for Caution only.
-    Path 2 — Composite Emergency: never suppressed.
-    Path 3 — Fever vs Hyperthermia conditional label selection.
+    Each _evaluate_*() function returns exactly 0 or 1 AlertItem — the highest
+    matching tier for that symptom.  Emergency tiers are severity upgrades of
+    the same symptom, never separate events.
     """
-    alerts: list[AlertItem] = []
     exercising = scenario == "exercise"
     in_habitat = location == "iva"
 
-    # ── Convenience aliases from devices (fall back to WearableSnapshot if not provided) ──
     if devices:
-        hr      = devices.bio_monitor.heart_rate_bpm
-        rr      = devices.bio_monitor.breathing_rate_bpm
-        spo2    = devices.bio_monitor.spo2_pct
-        sbp     = devices.bio_monitor.systolic_mmhg
-        core_t  = devices.thermo_mini.core_body_temp_c
-        pco2    = devices.personal_co2.current_ppm
+        hr     = devices.bio_monitor.heart_rate_bpm
+        rr     = devices.bio_monitor.breathing_rate_bpm
+        spo2   = devices.bio_monitor.spo2_pct
+        sbp    = devices.bio_monitor.systolic_mmhg
+        core_t = devices.thermo_mini.core_body_temp_c
+        pco2   = devices.personal_co2.current_ppm
     else:
-        hr      = w.heart_rate_bpm
-        rr      = w.respiratory_rate_bpm
-        spo2    = w.spo2_pct
-        sbp     = w.systolic_mmhg
-        core_t  = 37.0   # no device → no temp alerts
-        pco2    = 0.0    # no device → no personal CO₂ alerts
+        hr     = w.heart_rate_bpm
+        rr     = w.respiratory_rate_bpm
+        spo2   = w.spo2_pct
+        sbp    = w.systolic_mmhg
+        core_t = 37.0
+        pco2   = 0.0
 
     co2_mmhg = env.cabin_co2_mmhg
     dose     = env.mission_cumulative_dose_msv
 
-    # ─────────────────────────────────────────────────────────────────────────
-    # PATH 1 — Single-parameter threshold evaluation
-    # ─────────────────────────────────────────────────────────────────────────
+    symptom_results = [
+        _evaluate_hypoxaemia(hr, rr, spo2, devices, env),
+        _evaluate_hypercapnia(pco2, co2_mmhg, devices, env, in_habitat),
+        _evaluate_heart_rate(hr, sbp, devices, env, exercising),
+        _evaluate_blood_pressure(sbp, hr, spo2, devices, env),
+        _evaluate_cardiovascular_decompensation(hr, sbp, spo2, devices, env),
+        _evaluate_core_temp(core_t, hr, rr, devices, env),
+        _evaluate_breathing_rate(rr, devices, env, exercising),
+        _evaluate_radiation(dose, devices, env),
+        _evaluate_cabin_temp(env, devices) if in_habitat else None,
+        _evaluate_cabin_humidity(env, devices) if in_habitat else None,
+    ]
 
-    # §5.1 Hypoxaemia — spo2
-    if spo2 < 92:
-        alerts.append(_make_alert(
-            "spo2-warn", "spo2_low", "warning", AlertSeverity.WARNING,
-            "Hypoxaemia (low blood oxygen)",
-            "Marked drop in SpO₂; follow medical protocol.",
-            "Bio-Monitor (SpO₂)", "SpO₂", f"{spo2:.1f} %", "< 92 %",
-            devices, env,
-        ))
-    elif spo2 < 94:
-        alerts.append(_make_alert(
-            "spo2-caut", "spo2_low", "caution", AlertSeverity.CAUTION,
-            "Hypoxaemia (low blood oxygen)",
-            "SpO₂ below normal; monitor and notify Flight Surgeon.",
-            "Bio-Monitor (SpO₂)", "SpO₂", f"{spo2:.1f} %", "< 94 %",
-            devices, env,
-        ))
+    alerts: list[AlertItem] = [r for r in symptom_results if r is not None]
 
-    # §5.2 Hypercapnia — single alert; highest tier across both CO₂ sources wins.
-    # When both sources exceed Caution simultaneously, PATH 2 fires an Emergency
-    # composite and PATH 1 must be suppressed to avoid duplicate alerts.
-    _co2_both_caut = in_habitat and co2_mmhg > 6 and pco2 > 1000
-    _co2_warn  = (in_habitat and co2_mmhg > 8) or pco2 > 2500
-    _co2_caut  = ((in_habitat and co2_mmhg > 6) or pco2 > 1000) and not _co2_both_caut
-    if _co2_warn:
-        _src  = "Environmental & Personal CO₂ monitors" if (in_habitat and co2_mmhg > 8) and pco2 > 2500 \
-                else ("Environmental monitor" if in_habitat and co2_mmhg > 8 else "Personal CO₂ monitor")
-        _par  = "Cabin CO₂ / Personal CO₂" if (in_habitat and co2_mmhg > 8) and pco2 > 2500 \
-                else ("Cabin CO₂" if in_habitat and co2_mmhg > 8 else "Personal CO₂")
-        _val  = f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm" if (in_habitat and co2_mmhg > 8) and pco2 > 2500 \
-                else (f"{co2_mmhg:.2f} mmHg" if in_habitat and co2_mmhg > 8 else f"{pco2:.0f} ppm")
-        _thr  = "> 8 mmHg or > 2 500 ppm"
-        alerts.append(_make_alert(
-            "co2-warn", "cabin_co2_high", "warning", AlertSeverity.WARNING,
-            "Hypercapnia (high CO₂)",
-            "CO₂ at Warning level; initiate scrubber recovery and improve ventilation immediately.",
-            _src, _par, _val, _thr,
-            devices, env,
-        ))
-    elif _co2_caut:
-        _src  = "Environmental & Personal CO₂ monitors" if (in_habitat and co2_mmhg > 6) and pco2 > 1000 \
-                else ("Environmental monitor" if in_habitat and co2_mmhg > 6 else "Personal CO₂ monitor")
-        _par  = "Cabin CO₂ / Personal CO₂" if (in_habitat and co2_mmhg > 6) and pco2 > 1000 \
-                else ("Cabin CO₂" if in_habitat and co2_mmhg > 6 else "Personal CO₂")
-        _val  = f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm" if (in_habitat and co2_mmhg > 6) and pco2 > 1000 \
-                else (f"{co2_mmhg:.2f} mmHg" if in_habitat and co2_mmhg > 6 else f"{pco2:.0f} ppm")
-        _thr  = "> 6 mmHg or > 1 000 ppm"
-        alerts.append(_make_alert(
-            "co2-caut", "cabin_co2_high", "caution", AlertSeverity.CAUTION,
-            "Hypercapnia (high CO₂)",
-            "CO₂ levels elevated; move to better-ventilated area and notify Flight Surgeon.",
-            _src, _par, _val, _thr,
-            devices, env,
-        ))
-
-    # §5.3 / §5.4 Heart rate — high and low are mutually exclusive by physiology;
-    # enforced here with a single if/elif chain to prevent simultaneous firing.
-    if hr > 130:
-        alerts.append(_make_alert(
-            "hr-tachy-warn", "heart_rate_high", "warning", AlertSeverity.WARNING,
-            "Tachycardia (fast heart rate)",
-            "Sustained high HR at rest; prompt assessment required.",
-            "Bio-Monitor (ECG/PPG)", "Heart rate", f"{hr:.0f} bpm", "> 130 bpm",
-            devices, env,
-        ))
-    elif hr > 120 and not exercising:
-        alerts.append(_make_alert(
-            "hr-tachy-caut", "heart_rate_high", "caution", AlertSeverity.CAUTION,
-            "Tachycardia (fast heart rate)",
-            "Heart rate elevated for resting context.",
-            "Bio-Monitor (ECG/PPG)", "Heart rate", f"{hr:.0f} bpm", "> 120 bpm (rest)",
-            devices, env,
-        ))
-    elif hr < 40:
-        alerts.append(_make_alert(
-            "hr-brady-warn", "heart_rate_low", "warning", AlertSeverity.WARNING,
-            "Bradycardia (slow heart rate)",
-            "Very low HR; assess hemodynamics and ECG immediately.",
-            "Bio-Monitor", "Heart rate", f"{hr:.0f} bpm", "< 40 bpm",
-            devices, env,
-        ))
-    elif hr < 45:
-        alerts.append(_make_alert(
-            "hr-brady-caut", "heart_rate_low", "caution", AlertSeverity.CAUTION,
-            "Bradycardia (slow heart rate)",
-            "HR below normal; compare to personal baseline and check ECG rhythm.",
-            "Bio-Monitor", "Heart rate", f"{hr:.0f} bpm", "< 45 bpm",
-            devices, env,
-        ))
-
-    # §5.5a / §5.5b Systolic BP — high and low are mutually exclusive;
-    # single if/elif chain prevents simultaneous firing.
-    if sbp > 170:
-        alerts.append(_make_alert(
-            "bp-hyper-warn", "systolic_high", "warning", AlertSeverity.WARNING,
-            "Hypertension (high blood pressure)",
-            "Severe hypertension; risk of hypertensive crisis.",
-            "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "> 170 mmHg",
-            devices, env,
-        ))
-    elif sbp > 160:
-        alerts.append(_make_alert(
-            "bp-hyper-caut", "systolic_high", "caution", AlertSeverity.CAUTION,
-            "Hypertension (high blood pressure)",
-            "Systolic BP elevated above operational band.",
-            "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "> 160 mmHg",
-            devices, env,
-        ))
-    elif sbp < 80:
-        alerts.append(_make_alert(
-            "bp-hypo-warn", "systolic_low", "warning", AlertSeverity.WARNING,
-            "Hypotension (low blood pressure)",
-            "Significant hypotension; organ perfusion compromised.",
-            "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "< 80 mmHg",
-            devices, env,
-        ))
-    elif sbp < 90:
-        alerts.append(_make_alert(
-            "bp-hypo-caut", "systolic_low", "caution", AlertSeverity.CAUTION,
-            "Hypotension (low blood pressure)",
-            "Low BP; check posture, hydration, and hemodynamic signs.",
-            "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "< 90 mmHg",
-            devices, env,
-        ))
-
-    # §5.7 / §5.8b — Core temperature high (Path 3: Fever vs Hyperthermia)
-    if core_t > 38.0:
-        if hr > 100 or rr > 18:
-            condition_key = "core_temp_high_fever"
-            tier = "warning"
-        else:
-            condition_key = "core_temp_high_hyperthermia"
-            tier = "warning"
-        alerts.append(_make_alert(
-            "core-temp-hi-warn", condition_key, tier, AlertSeverity.WARNING,
-            SYMPTOM_MAP[condition_key]["symptom_title"],
-            "Core body temperature at Warning level.",
-            "Thermo-mini", "Core body temperature", f"{core_t:.2f} °C", "> 38.0 °C",
-            devices, env,
-        ))
-    elif core_t > 37.5:
-        if hr > 100 or rr > 18:
-            condition_key = "core_temp_high_fever"
-            tier = "caution"
-        else:
-            condition_key = "core_temp_high_hyperthermia"
-            tier = "caution"
-        alerts.append(_make_alert(
-            "core-temp-hi-caut", condition_key, tier, AlertSeverity.CAUTION,
-            SYMPTOM_MAP[condition_key]["symptom_title"],
-            "Core body temperature elevated above normal.",
-            "Thermo-mini", "Core body temperature", f"{core_t:.2f} °C", "> 37.5 °C",
-            devices, env,
-        ))
-
-    # §5.8a Hypothermia — core temperature low
-    if core_t < 35.0:
-        alerts.append(_make_alert(
-            "core-temp-lo-warn", "core_temp_low", "warning", AlertSeverity.WARNING,
-            "Hypothermia risk (body temperature low)",
-            "Significant hypothermia; begin active rewarming immediately.",
-            "Thermo-mini", "Core body temperature", f"{core_t:.2f} °C", "< 35.0 °C",
-            devices, env,
-        ))
-    elif core_t < 36.0:
-        alerts.append(_make_alert(
-            "core-temp-lo-caut", "core_temp_low", "caution", AlertSeverity.CAUTION,
-            "Hypothermia risk (body temperature low)",
-            "Core temp below normal; check cabin temp and provide insulation.",
-            "Thermo-mini", "Core body temperature", f"{core_t:.2f} °C", "< 36.0 °C",
-            devices, env,
-        ))
-
-    # §5.9a / §5.9b Breathing rate — high and low are mutually exclusive;
-    # single if/elif chain prevents simultaneous firing.
-    if rr > 24:
-        alerts.append(_make_alert(
-            "rr-tachy-warn", "breathing_rate_high", "warning", AlertSeverity.WARNING,
-            "Tachypnoea (fast breathing rate)",
-            "Marked respiratory distress; identify and address the primary driver.",
-            "Bio-Monitor", "Breathing rate", f"{rr:.0f} br/min", "> 24 br/min",
-            devices, env,
-        ))
-    elif rr > 20 and not exercising:
-        alerts.append(_make_alert(
-            "rr-tachy-caut", "breathing_rate_high", "caution", AlertSeverity.CAUTION,
-            "Tachypnoea (fast breathing rate)",
-            "Elevated RR at rest; check SpO₂, CO₂, and core temperature.",
-            "Bio-Monitor", "Breathing rate", f"{rr:.0f} br/min", "> 20 br/min (rest)",
-            devices, env,
-        ))
-    elif rr < 8:
-        alerts.append(_make_alert(
-            "rr-brady-warn", "breathing_rate_low", "warning", AlertSeverity.WARNING,
-            "Bradypnoea (slow breathing rate)",
-            "Severely reduced rate; risk of CO₂ retention and hypoxaemia.",
-            "Bio-Monitor", "Breathing rate", f"{rr:.0f} br/min", "< 8 br/min",
-            devices, env,
-        ))
-    elif rr < 10:
-        alerts.append(_make_alert(
-            "rr-brady-caut", "breathing_rate_low", "caution", AlertSeverity.CAUTION,
-            "Bradypnoea (slow breathing rate)",
-            "Low RR; confirm consciousness and check SpO₂.",
-            "Bio-Monitor", "Breathing rate", f"{rr:.0f} br/min", "< 10 br/min",
-            devices, env,
-        ))
-
-    # §5.11 Radiation dose
-    if dose > 150:
-        alerts.append(_make_alert(
-            "radiation-warn", "mission_dose_high", "warning", AlertSeverity.WARNING,
-            "Cumulative radiation dose — monitoring milestone reached",
-            "High cumulative dose; review EVA schedule and dose budget.",
-            "Dosimeter (mission cumulative)", "Cumulative dose", f"{dose:.1f} mSv", "> 150 mSv",
-            devices, env,
-        ))
-    elif dose > 50:
-        alerts.append(_make_alert(
-            "radiation-caut", "mission_dose_high", "caution", AlertSeverity.CAUTION,
-            "Cumulative radiation dose — monitoring milestone reached",
-            "Track dose against mission limits (ALARA).",
-            "Dosimeter (mission cumulative)", "Cumulative dose", f"{dose:.1f} mSv", "> 50 mSv",
-            devices, env,
-        ))
-
-    # §5.12a Cabin temperature (habitat only)
-    if in_habitat:
-        if env.cabin_temp_c > 27:
-            alerts.append(_make_alert(
-                "cabin-temp-hot-warn", "cabin_temp_hot", "warning", AlertSeverity.WARNING,
-                "Cabin temperature — too warm",
-                "Thermal stress risk; reduce heat sources immediately.",
-                "Environmental monitor", "Cabin temperature", f"{env.cabin_temp_c:.1f} °C", "> 27 °C",
-                devices, env,
-            ))
-        elif env.cabin_temp_c > 26:
-            alerts.append(_make_alert(
-                "cabin-temp-hot-caut", "cabin_temp_hot", "caution", AlertSeverity.CAUTION,
-                "Cabin temperature — too warm",
-                "Cabin above comfort range; adjust HVAC.",
-                "Environmental monitor", "Cabin temperature", f"{env.cabin_temp_c:.1f} °C", "> 26 °C",
-                devices, env,
-            ))
-        elif env.cabin_temp_c < 18:
-            alerts.append(_make_alert(
-                "cabin-temp-cold-warn", "cabin_temp_cold", "warning", AlertSeverity.WARNING,
-                "Cabin temperature — too cold",
-                "Hypothermia risk; provide insulation and activate heating.",
-                "Environmental monitor", "Cabin temperature", f"{env.cabin_temp_c:.1f} °C", "< 18 °C",
-                devices, env,
-            ))
-        elif env.cabin_temp_c < 19:
-            alerts.append(_make_alert(
-                "cabin-temp-cold-caut", "cabin_temp_cold", "caution", AlertSeverity.CAUTION,
-                "Cabin temperature — too cold",
-                "Cabin below comfort range; adjust HVAC.",
-                "Environmental monitor", "Cabin temperature", f"{env.cabin_temp_c:.1f} °C", "< 19 °C",
-                devices, env,
-            ))
-
-    # §5.12b Cabin humidity (habitat only)
-    if in_habitat:
-        if env.cabin_humidity_pct > 75:
-            alerts.append(_make_alert(
-                "cabin-hum-hi-warn", "cabin_humidity_high", "warning", AlertSeverity.WARNING,
-                "Cabin humidity — too high",
-                "Condensation and pathogen risk; activate dehumidifier.",
-                "Environmental monitor", "Cabin humidity", f"{env.cabin_humidity_pct:.1f} %", "> 75 %",
-                devices, env,
-            ))
-        elif env.cabin_humidity_pct > 70:
-            alerts.append(_make_alert(
-                "cabin-hum-hi-caut", "cabin_humidity_high", "caution", AlertSeverity.CAUTION,
-                "Cabin humidity — too high",
-                "Elevated humidity; check moisture sources.",
-                "Environmental monitor", "Cabin humidity", f"{env.cabin_humidity_pct:.1f} %", "> 70 %",
-                devices, env,
-            ))
-        elif env.cabin_humidity_pct < 25:
-            alerts.append(_make_alert(
-                "cabin-hum-lo-warn", "cabin_humidity_low", "warning", AlertSeverity.WARNING,
-                "Cabin humidity — too low",
-                "Very low humidity; mucosal defences impaired.",
-                "Environmental monitor", "Cabin humidity", f"{env.cabin_humidity_pct:.1f} %", "< 25 %",
-                devices, env,
-            ))
-        elif env.cabin_humidity_pct < 30:
-            alerts.append(_make_alert(
-                "cabin-hum-lo-caut", "cabin_humidity_low", "caution", AlertSeverity.CAUTION,
-                "Cabin humidity — too low",
-                "Dry habitat; advise increased fluid intake.",
-                "Environmental monitor", "Cabin humidity", f"{env.cabin_humidity_pct:.1f} %", "< 30 %",
-                devices, env,
-            ))
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # PATH 2 — Composite Emergency triggers (exercise suppression never applies)
-    # ─────────────────────────────────────────────────────────────────────────
-
-    # §5.6 Cardiovascular Decompensation
-    if hr > 120 and sbp < 90 and spo2 < 94:
-        meta = SYMPTOM_MAP["cardiovascular_decompensation"]
-        alerts.append(AlertItem(
-            id="composite-cardio-decomp",
-            severity=AlertSeverity.WARNING,
-            title=meta["symptom_title"],
-            message="Tachycardia + hypotension + desaturation simultaneously — life-threatening pattern.",
-            source="composite_emergency",
-            parameter=None,
-            value=None,
-            threshold="HR > 120 AND SBP < 90 AND SpO₂ < 94",
-            symptom_title=meta["symptom_title"],
-            plain_language_gloss=meta["plain_language_gloss"],
-            urgency=meta["urgency"]["emergency"],
-            related_params=_build_related_params("cardiovascular_decompensation", devices, env),
-        ))
-
-    # §5.1E Hypoxaemia Emergency
-    if spo2 < 92 and hr > 130 and rr > 20:
-        meta = SYMPTOM_MAP["spo2_low"]
-        alerts.append(AlertItem(
-            id="composite-spo2-emerg",
-            severity=AlertSeverity.WARNING,
-            title=meta["symptom_title"],
-            message="Hypoxaemia + tachycardia + tachypnoea simultaneously — escalate to decompensation protocol.",
-            source="composite_emergency",
-            parameter=None,
-            value=None,
-            threshold="SpO₂ < 92 AND HR > 130 AND RR > 20",
-            symptom_title=meta["symptom_title"],
-            plain_language_gloss=meta["plain_language_gloss"],
-            urgency=meta["urgency"]["emergency"],
-            related_params=_build_related_params("spo2_low", devices, env),
-        ))
-
-    # §5.5bE Hypotension Emergency
-    if sbp < 90 and hr > 120 and spo2 < 94:
-        meta = SYMPTOM_MAP["systolic_low"]
-        alerts.append(AlertItem(
-            id="composite-hypo-emerg",
-            severity=AlertSeverity.WARNING,
-            title=meta["symptom_title"],
-            message="Hypotension + tachycardia + desaturation — escalate to §5.6 protocol.",
-            source="composite_emergency",
-            parameter=None,
-            value=None,
-            threshold="SBP < 90 AND HR > 120 AND SpO₂ < 94",
-            symptom_title=meta["symptom_title"],
-            plain_language_gloss=meta["plain_language_gloss"],
-            urgency=meta["urgency"]["emergency"],
-            related_params=_build_related_params("systolic_low", devices, env),
-        ))
-
-    # §5.4E Bradycardia Emergency
-    if hr < 40 and sbp < 90:
-        meta = SYMPTOM_MAP["heart_rate_low"]
-        alerts.append(AlertItem(
-            id="composite-brady-emerg",
-            severity=AlertSeverity.WARNING,
-            title=meta["symptom_title"],
-            message="Bradycardia + hypotension — follow cardiovascular emergency protocol.",
-            source="composite_emergency",
-            parameter=None,
-            value=None,
-            threshold="HR < 40 AND SBP < 90",
-            symptom_title=meta["symptom_title"],
-            plain_language_gloss=meta["plain_language_gloss"],
-            urgency=meta["urgency"]["emergency"],
-            related_params=_build_related_params("heart_rate_low", devices, env),
-        ))
-
-    # §5.2E Hypercapnia Emergency
-    if co2_mmhg > 6 and pco2 > 1000:
-        meta = SYMPTOM_MAP["cabin_co2_high"]
-        alerts.append(AlertItem(
-            id="composite-co2-emerg",
-            severity=AlertSeverity.WARNING,
-            title=meta["symptom_title"],
-            message="Both cabin and personal CO₂ elevated simultaneously — severity upgraded.",
-            source="composite_emergency",
-            parameter=None,
-            value=None,
-            threshold="Cabin CO₂ > 6 mmHg AND Personal CO₂ > 1 000 ppm",
-            symptom_title=meta["symptom_title"],
-            plain_language_gloss=meta["plain_language_gloss"],
-            urgency=meta["urgency"]["emergency"],
-            related_params=_build_related_params("cabin_co2_high", devices, env),
-        ))
-
-    # ─────────────────────────────────────────────────────────────────────────
-    # Sensor integrity alerts
-    # ─────────────────────────────────────────────────────────────────────────
+    # Sensor integrity alerts — structural, not symptom-based
     if integrity.heart_rate != "ok":
         alerts.append(AlertItem(
             id="integrity-hr",
