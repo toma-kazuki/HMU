@@ -16,14 +16,14 @@
 | **Scope** | Backend alert evaluation rewrite (`alerts.py`) |
 | **Source gaps** | v1.0 implementation — structural defects discovered during QA |
 | **Design specs** | `8_medical_diagnosis.md §5` |
-| **Implementation commit** | *(see below)* |
+| **Implementation commit** | `4afb961` |
 | **Status** | ✅ Complete |
 
 ### Commits that constitute this revision
 
 | Hash | Message summary | Scope |
 | :--- | :--- | :--- |
-| *(pending — commit after record update)* | Refactor alert evaluation to symptom-unit architecture | `alerts.py` |
+| `4afb961` | Refactor alert evaluation to symptom-unit architecture (v1.1) | `alerts.py` |
 
 ---
 
