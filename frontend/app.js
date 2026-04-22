@@ -1853,6 +1853,31 @@ function urgencyBadgeHtml(urgency) {
   return `<span class="urgency-badge ${cls}">${escapeHtml(urgency)}</span>`;
 }
 
+// ── Field-path → display metadata lookup ─────────────
+const FIELD_META = {
+  "bio_monitor.heart_rate_bpm":          { label: "Heart rate",          paramId: "heart_rate_bpm",           fmt: (v) => `${v} bpm` },
+  "bio_monitor.resting_heart_rate_bpm":  { label: "Resting heart rate",  paramId: null,                       fmt: (v) => `${v} bpm` },
+  "bio_monitor.spo2_pct":               { label: "SpO₂",                paramId: "spo2_pct",                 fmt: (v) => `${v} %` },
+  "bio_monitor.systolic_mmhg":           { label: "Systolic BP",         paramId: "systolic_mmhg",            fmt: (v) => `${v} mmHg` },
+  "bio_monitor.diastolic_mmhg":          { label: "Diastolic BP",        paramId: null,                       fmt: (v) => `${v} mmHg` },
+  "bio_monitor.breathing_rate_bpm":      { label: "Breathing rate",      paramId: "respiration_rate_bpm",     fmt: (v) => `${v} br/min` },
+  "bio_monitor.tidal_volume_l":          { label: "Tidal volume",        paramId: null,                       fmt: (v) => `${Number(v).toFixed(2)} L` },
+  "bio_monitor.skin_temp_c":             { label: "Skin temp",           paramId: null,                       fmt: (v) => `${v} °C` },
+  "bio_monitor.ecg_rhythm":              { label: "ECG rhythm",          paramId: null,                       fmt: (v) => v },
+  "bio_monitor.activity_mets":           { label: "Activity (METs)",     paramId: null,                       fmt: (v) => `${v} METs` },
+  "thermo_mini.core_body_temp_c":        { label: "Core body temp",      paramId: "core_body_temp_c",         fmt: (v) => `${v} °C` },
+  "oura_ring.hrv_ms":                    { label: "HRV (RMSSD)",         paramId: null,                       fmt: (v) => `${v} ms` },
+  "oura_ring.spo2_avg_pct":             { label: "SpO₂ overnight avg",  paramId: null,                       fmt: (v) => `${v} %` },
+  "oura_ring.body_temp_deviation_c":     { label: "Temp deviation",      paramId: null,                       fmt: (v) => `${v > 0 ? "+" : ""}${v} °C` },
+  "personal_co2.current_ppm":            { label: "Personal CO₂",        paramId: "personal_co2_ppm",         fmt: (v) => `${v} ppm` },
+  "evarm.personal_cumulative_msv":       { label: "Personal dose",       paramId: "radiation_cumulative_msv", fmt: (v) => `${v} mSv` },
+  "evarm.dose_rate_usv_h":               { label: "Dose rate",           paramId: null,                       fmt: (v) => `${v} μSv/h` },
+  "environmental.cabin_co2_mmhg":        { label: "Cabin CO₂",           paramId: "cabin_co2_mmhg",           fmt: (v) => `${v} mmHg` },
+  "environmental.cabin_temp_c":          { label: "Cabin temp",          paramId: "cabin_temp_c",             fmt: (v) => `${v} °C` },
+  "environmental.cabin_humidity_pct":    { label: "Cabin humidity",      paramId: "cabin_humidity_pct",       fmt: (v) => `${v} %` },
+  "environmental.mission_cumulative_dose_msv": { label: "Mission dose",  paramId: "radiation_cumulative_msv", fmt: (v) => `${v} mSv` },
+};
+
 // ── Related parameter panel ───────────────────────────
 function relatedParamsHtml(relatedParams) {
   if (!relatedParams || !relatedParams.length) return "";
@@ -1863,7 +1888,6 @@ function relatedParamsHtml(relatedParams) {
       if (p.show_rule === "if_alarming") return p.currently_alarming === true;
       return false; // context — hidden
     })
-    // Sort: always entries first, then if_alarming
     .sort((a, b) => {
       const order = { always: 0, if_alarming: 1 };
       return (order[a.show_rule] ?? 2) - (order[b.show_rule] ?? 2);
@@ -1872,13 +1896,19 @@ function relatedParamsHtml(relatedParams) {
   if (!visible.length) return "";
 
   const rows = visible.map((p) => {
-    const raw = getNestedValue(lastDetailData, p.field);
-    const valueStr = raw !== undefined && raw !== null ? String(raw) : "—";
-    const alarmCls = p.currently_alarming ? " related-param-row--alarming" : "";
-    return `<div class="related-param-row${alarmCls}">
-      <span class="related-param-field">${escapeHtml(p.field)}</span>
-      <span class="related-param-role">${escapeHtml(p.role)}</span>
-      <span class="related-param-value">${escapeHtml(valueStr)}</span>
+    const meta = FIELD_META[p.field];
+    const raw  = getNestedValue(lastDetailData, p.field);
+    const label    = meta ? meta.label : p.field;
+    const valueStr = (raw !== undefined && raw !== null && meta) ? meta.fmt(raw) : (raw !== undefined && raw !== null ? String(raw) : "—");
+    const paramId  = meta?.paramId || null;
+    const rawNum   = (typeof raw === "number") ? raw : parseFloat(raw);
+    const cls  = (paramId && !isNaN(rawNum)) ? paramClass(paramId, rawNum) : "";
+    const bar  = (paramId && !isNaN(rawNum) && PARAM_RANGES[paramId]) ? sensorMiniBar(paramId, rawNum) : "";
+    const alarmCls = p.currently_alarming ? " sdp-row--alarming" : "";
+    return `<div class="sdp-row${bar ? ' has-bar' : ''}${alarmCls}">
+      <span class="sdp-row-label">${escapeHtml(label)}</span>
+      <span class="sdp-row-value ${cls}">${escapeHtml(valueStr)}</span>
+      ${bar}
     </div>`;
   }).join("");
 
@@ -1905,12 +1935,20 @@ function renderAlerts(alerts) {
     const gloss = a.plain_language_gloss
       ? `<p class="alert-gloss">${escapeHtml(a.plain_language_gloss)}</p>`
       : "";
-    const urgencyBadge = urgencyBadgeHtml(a.urgency);
+    // Compact badge: only Act immediately or Notify Flight Surgeon (no Monitor)
+    const compactBadge = (() => {
+      const u = a.urgency || "";
+      if (u.startsWith("Act immediately")) return `<span class="urgency-badge urgency-badge--act">Act immediately</span>`;
+      if (u.startsWith("Notify"))          return `<span class="urgency-badge urgency-badge--notify">Notify Flight Surgeon</span>`;
+      return "";
+    })();
 
+    const sourceTag = a.source ? `<span class="alert-source-tag">${escapeHtml(a.source)}</span>` : "";
     const trendHead = hasTrend
       ? `<div class="alert-expand-head">
           <span class="alert-expand-param"></span>
           <span class="alert-expand-current"></span>
+          ${sourceTag}
         </div>`
       : "";
 
@@ -1927,23 +1965,17 @@ function renderAlerts(alerts) {
     li.innerHTML = `
       <div class="alert-compact" role="button" tabindex="0" aria-expanded="false">
         <span class="severity-tag ${a.severity}">${a.severity}</span>
-        <div class="alert-compact-body">
-          <h3 class="alert-title">${escapeHtml(displayTitle)}</h3>
-          ${gloss}
-          ${urgencyBadge}
-        </div>
+        <h3 class="alert-title">${escapeHtml(displayTitle)}</h3>
+        ${compactBadge}
       </div>
       <div class="alert-expand hidden" aria-hidden="true">
         <div class="alert-expand-copy">
+          ${gloss}
           ${trendHead}
+          ${trendChart}
           <p class="alert-body">${escapeHtml(a.message)}</p>
-          <div class="alert-meta">Source: ${escapeHtml(a.source)}
-            ${a.parameter && a.value ? ` · ${escapeHtml(a.parameter)}: ${escapeHtml(a.value)}` : ""}
-            ${a.threshold ? ` (threshold: ${escapeHtml(a.threshold)})` : ""}
-          </div>
           ${relatedPanel}
         </div>
-        ${trendChart}
       </div>`;
 
     const compact = li.querySelector(".alert-compact");

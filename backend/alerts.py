@@ -492,44 +492,45 @@ def evaluate_alerts(
             devices, env,
         ))
 
-    # §5.2 Hypercapnia — cabin CO₂ (only in habitat)
-    if in_habitat:
-        if co2_mmhg > 8:
-            alerts.append(_make_alert(
-                "co2-warn", "cabin_co2_high", "warning", AlertSeverity.WARNING,
-                "Hypercapnia (high CO₂)",
-                "Cabin CO₂ at Warning level; initiate scrubber recovery immediately.",
-                "Environmental monitor", "Cabin CO₂", f"{co2_mmhg:.2f} mmHg", "> 8 mmHg",
-                devices, env,
-            ))
-        elif co2_mmhg > 6:
-            alerts.append(_make_alert(
-                "co2-caut", "cabin_co2_high", "caution", AlertSeverity.CAUTION,
-                "Hypercapnia (high CO₂)",
-                "CO₂ partial pressure associated with cognitive performance risk.",
-                "Environmental monitor", "Cabin CO₂", f"{co2_mmhg:.2f} mmHg", "> 6 mmHg",
-                devices, env,
-            ))
-
-    # §5.2 Hypercapnia — personal CO₂
-    if pco2 > 2500:
+    # §5.2 Hypercapnia — single alert; highest tier across both CO₂ sources wins.
+    # When both sources exceed Caution simultaneously, PATH 2 fires an Emergency
+    # composite and PATH 1 must be suppressed to avoid duplicate alerts.
+    _co2_both_caut = in_habitat and co2_mmhg > 6 and pco2 > 1000
+    _co2_warn  = (in_habitat and co2_mmhg > 8) or pco2 > 2500
+    _co2_caut  = ((in_habitat and co2_mmhg > 6) or pco2 > 1000) and not _co2_both_caut
+    if _co2_warn:
+        _src  = "Environmental & Personal CO₂ monitors" if (in_habitat and co2_mmhg > 8) and pco2 > 2500 \
+                else ("Environmental monitor" if in_habitat and co2_mmhg > 8 else "Personal CO₂ monitor")
+        _par  = "Cabin CO₂ / Personal CO₂" if (in_habitat and co2_mmhg > 8) and pco2 > 2500 \
+                else ("Cabin CO₂" if in_habitat and co2_mmhg > 8 else "Personal CO₂")
+        _val  = f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm" if (in_habitat and co2_mmhg > 8) and pco2 > 2500 \
+                else (f"{co2_mmhg:.2f} mmHg" if in_habitat and co2_mmhg > 8 else f"{pco2:.0f} ppm")
+        _thr  = "> 8 mmHg or > 2 500 ppm"
         alerts.append(_make_alert(
-            "pco2-warn", "personal_co2_high", "warning", AlertSeverity.WARNING,
+            "co2-warn", "cabin_co2_high", "warning", AlertSeverity.WARNING,
             "Hypercapnia (high CO₂)",
-            "Personal CO₂ exposure at Warning level.",
-            "Personal CO₂ monitor", "Personal CO₂", f"{pco2:.0f} ppm", "> 2 500 ppm",
+            "CO₂ at Warning level; initiate scrubber recovery and improve ventilation immediately.",
+            _src, _par, _val, _thr,
             devices, env,
         ))
-    elif pco2 > 1000:
+    elif _co2_caut:
+        _src  = "Environmental & Personal CO₂ monitors" if (in_habitat and co2_mmhg > 6) and pco2 > 1000 \
+                else ("Environmental monitor" if in_habitat and co2_mmhg > 6 else "Personal CO₂ monitor")
+        _par  = "Cabin CO₂ / Personal CO₂" if (in_habitat and co2_mmhg > 6) and pco2 > 1000 \
+                else ("Cabin CO₂" if in_habitat and co2_mmhg > 6 else "Personal CO₂")
+        _val  = f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm" if (in_habitat and co2_mmhg > 6) and pco2 > 1000 \
+                else (f"{co2_mmhg:.2f} mmHg" if in_habitat and co2_mmhg > 6 else f"{pco2:.0f} ppm")
+        _thr  = "> 6 mmHg or > 1 000 ppm"
         alerts.append(_make_alert(
-            "pco2-caut", "personal_co2_high", "caution", AlertSeverity.CAUTION,
+            "co2-caut", "cabin_co2_high", "caution", AlertSeverity.CAUTION,
             "Hypercapnia (high CO₂)",
-            "Elevated personal CO₂ exposure; move to better-ventilated area.",
-            "Personal CO₂ monitor", "Personal CO₂", f"{pco2:.0f} ppm", "> 1 000 ppm",
+            "CO₂ levels elevated; move to better-ventilated area and notify Flight Surgeon.",
+            _src, _par, _val, _thr,
             devices, env,
         ))
 
-    # §5.3 Tachycardia — heart rate high
+    # §5.3 / §5.4 Heart rate — high and low are mutually exclusive by physiology;
+    # enforced here with a single if/elif chain to prevent simultaneous firing.
     if hr > 130:
         alerts.append(_make_alert(
             "hr-tachy-warn", "heart_rate_high", "warning", AlertSeverity.WARNING,
@@ -546,9 +547,7 @@ def evaluate_alerts(
             "Bio-Monitor (ECG/PPG)", "Heart rate", f"{hr:.0f} bpm", "> 120 bpm (rest)",
             devices, env,
         ))
-
-    # §5.4 Bradycardia — heart rate low
-    if hr < 40:
+    elif hr < 40:
         alerts.append(_make_alert(
             "hr-brady-warn", "heart_rate_low", "warning", AlertSeverity.WARNING,
             "Bradycardia (slow heart rate)",
@@ -565,7 +564,8 @@ def evaluate_alerts(
             devices, env,
         ))
 
-    # §5.5a Hypertension — systolic high
+    # §5.5a / §5.5b Systolic BP — high and low are mutually exclusive;
+    # single if/elif chain prevents simultaneous firing.
     if sbp > 170:
         alerts.append(_make_alert(
             "bp-hyper-warn", "systolic_high", "warning", AlertSeverity.WARNING,
@@ -582,9 +582,7 @@ def evaluate_alerts(
             "Bio-Monitor (BP)", "Systolic BP", f"{sbp:.0f} mmHg", "> 160 mmHg",
             devices, env,
         ))
-
-    # §5.5b Hypotension — systolic low
-    if sbp < 80:
+    elif sbp < 80:
         alerts.append(_make_alert(
             "bp-hypo-warn", "systolic_low", "warning", AlertSeverity.WARNING,
             "Hypotension (low blood pressure)",
@@ -649,7 +647,8 @@ def evaluate_alerts(
             devices, env,
         ))
 
-    # §5.9a Tachypnoea — breathing rate high
+    # §5.9a / §5.9b Breathing rate — high and low are mutually exclusive;
+    # single if/elif chain prevents simultaneous firing.
     if rr > 24:
         alerts.append(_make_alert(
             "rr-tachy-warn", "breathing_rate_high", "warning", AlertSeverity.WARNING,
@@ -666,9 +665,7 @@ def evaluate_alerts(
             "Bio-Monitor", "Breathing rate", f"{rr:.0f} br/min", "> 20 br/min (rest)",
             devices, env,
         ))
-
-    # §5.9b Bradypnoea — breathing rate low
-    if rr < 8:
+    elif rr < 8:
         alerts.append(_make_alert(
             "rr-brady-warn", "breathing_rate_low", "warning", AlertSeverity.WARNING,
             "Bradypnoea (slow breathing rate)",

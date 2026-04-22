@@ -2405,18 +2405,16 @@ body {
 }
 
 /* ── Alert item enhancements (Task 7) ─────────────────── */
-.alert-compact-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.18rem;
+/* alert-compact-body removed — compact is now a flat single-line row */
+.alert-compact .alert-title {
   flex: 1;
   min-width: 0;
 }
 .alert-gloss {
-  margin: 0;
-  font-size: 0.74rem;
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
-  line-height: 1.4;
+  line-height: 1.5;
 }
 
 /* Urgency badges */
@@ -2428,16 +2426,24 @@ body {
   font-weight: 600;
   letter-spacing: 0.03em;
   white-space: nowrap;
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  margin-top: 0.1rem;
+  flex-shrink: 0;
 }
 .urgency-badge--act     { background: rgba(248,81,73,0.18);  color: #f85149; }
 .urgency-badge--notify  { background: rgba(210,153,34,0.18); color: #d29922; }
 .urgency-badge--monitor { background: rgba(139,148,158,0.15); color: #8b949e; }
 
-/* Related parameters panel */
+/* Alert expand: source device tag next to param headline */
+.alert-source-tag {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  background: rgba(139,148,158,0.12);
+  border: 1px solid rgba(139,148,158,0.2);
+  border-radius: 4px;
+  padding: 0.1rem 0.45rem;
+  white-space: nowrap;
+}
+
+/* Related parameters panel — uses sdp-row from score detail */
 .related-params-panel {
   margin-top: 0.75rem;
   border-top: 1px solid var(--border);
@@ -2451,31 +2457,4 @@ body {
   text-transform: uppercase;
   color: var(--text-muted);
 }
-.related-param-row {
-  display: grid;
-  grid-template-columns: minmax(0,1.8fr) minmax(0,2.5fr) auto;
-  gap: 0.4rem 0.7rem;
-  align-items: baseline;
-  padding: 0.22rem 0;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
-  font-size: 0.74rem;
-}
-.related-param-row--alarming .related-param-field { color: #f85149; }
-.related-param-field {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.69rem;
-  color: var(--accent);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.related-param-role {
-  color: var(--text-muted);
-  font-size: 0.72rem;
-}
-.related-param-value {
-  font-family: var(--font-mono, monospace);
-  font-size: 0.74rem;
-  color: var(--text);
-  white-space: nowrap;
-}
+.related-params-panel .sdp-row--alarming .sdp-row-label { color: #f85149; }
