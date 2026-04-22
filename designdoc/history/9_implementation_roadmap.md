@@ -1,24 +1,65 @@
-# HMU Implementation Roadmap
+# Design modification record: Symptom-level alert system
 
-**Source:** `5_software_implementation.md` — Design–implementation gaps (v0.1 baseline).  
-**Design specifications:** `7_parameter_logic.md` · `8_medical_diagnosis.md`  
-**Codebase entry point:** `uvicorn backend.main:app --reload` → `http://localhost:8000`
+**Document type:** Design modification plan and implementation history  
+**Location:** `designdoc/history/` — archived after all tasks complete  
+**Design revision:** v1.0 — Symptom-level alert labelling (gap closure from v0.1 baseline)
 
 ---
 
-## How to use this document
+## Revision summary
 
-Each task in this roadmap is scoped for **one Coding AI prompt**. Tasks must be executed in order — later tasks depend on model fields and functions defined in earlier ones.
+| Field | Value |
+| :--- | :--- |
+| **Revision** | v1.0 |
+| **Date** | 2026-04-22 |
+| **Author** | toma-kazuki |
+| **Scope** | Backend alert system rewrite · Frontend alert and score panel updates |
+| **Source gaps** | `5_software_implementation.md` — Design–implementation gaps (v0.1 baseline) |
+| **Design specs** | `7_parameter_logic.md` · `8_medical_diagnosis.md` |
+| **Implementation commit** | `212858e` — "Implement symptom-level alert system aligned with design specs" |
+| **Status** | ✅ All tasks complete |
 
-**Workflow per task:**
+### Commits that constitute this revision
 
-1. Paste the relevant task section as context to the Coding AI along with the referenced design doc sections.
-2. The Coding AI implements the changes.
-3. Run the test steps listed under the task.
-4. When all success criteria pass, instruct the Coding AI to update this file:
-   - Change the task's **Status** line to `✅ Complete`
-   - Tick all success criteria checkboxes (`- [x]`)
-   - Update the Progress overview table at the top
+| Hash | Message summary | Scope |
+| :--- | :--- | :--- |
+| `68d99f4` | Reformat existing design docs with Markdown headings | docs 1–4 (formatting only) |
+| `4151e0f` | Add crew registration, per-device data model, and visual design | frontend, mock_data, roster, data/ |
+| `cb4ec31` | Add software implementation spec, parameter logic, and medical diagnosis docs | docs 5, 7, 8 (new) |
+| `212858e` | Implement symptom-level alert system aligned with design specs | alerts.py, models.py, main.py, app.js, styles.css |
+
+---
+
+## Background — Design–implementation gaps (v0.1 baseline)
+
+Before this revision the following gaps existed between the design specifications and the running prototype:
+
+| # | Gap | Current state (v0.1) | Required change |
+| :--- | :--- | :--- | :--- |
+| 1 | `AlertItem` missing symptom-level fields | No `symptom_title`, `urgency`, `related_params` fields | Add four optional fields to Pydantic model |
+| 2 | Alert titles are raw parameter names | `"Heart rate — WARNING"` | Map to clinical condition names from `8_medical_diagnosis.md §5` |
+| 3 | No Fever / Hyperthermia disambiguation | Temperature alerts always use one label | Add HR > 100 OR RR > 18 branching (Path 3) |
+| 4 | No composite Emergency triggers | Multi-parameter patterns not evaluated | Add five composite rules (§5.6, §5.1E, §5.5bE, §5.4E, §5.2E) |
+| 5 | No §5.10 Cognitive Performance Risk | Score values not used in alert logic | Add evaluate_cognitive_risk(); expose as cognitive_risk in payload |
+| 6 | Score detail panel has no advice text | Sensor rows only; no crew guidance | Inject SCORE_ADVICE block before sensor rows |
+| 7 | Alert detail shows no related parameters | Only raw value and threshold | Add related-parameter panel with always/if_alarming/context filtering |
+
+---
+
+## How to use this document type
+
+This file is a **design modification record** — it documents a single logical revision to the HMU design and its implementation. One file per revision, stored in `designdoc/history/`.
+
+**File naming convention:** `{revision_number}_{short_slug}.md`  
+Example: `9_implementation_roadmap.md` → next revision would be `10_{slug}.md`
+
+**Per-task workflow (for future revisions):**
+
+1. Identify gaps from the current design–implementation gap table in `5_software_implementation.md`.
+2. Create a new file in `designdoc/history/` using this format.
+3. Scope each task for one Coding AI prompt; record prerequisites and test steps.
+4. After implementation, record the git commit hash in the Revision summary table.
+5. Mark tasks complete (`✅`) and tick success criteria checkboxes (`- [x]`).
 
 ---
 
