@@ -8,45 +8,178 @@
  *   Everything else (environ., alerts) is always visible but compact.
  */
 
-// ── Operational mode labels ─────────────────────────
+// ── Operational mode (VD-R06 / §2.5 visual_design: chip label + icon + tint) ─
 const MODES = {
-  nominal_monitoring: { label: "Nominal monitoring", cls: "nominal" },
-  alert:              { label: "Alert",              cls: "alert"   },
-  degraded:           { label: "Degraded",           cls: "degraded"},
-  ground_supported:   { label: "Ground-supported",   cls: "ground"  },
+  nominal_monitoring: {
+    label:     "Nominal monitoring",
+    chipLabel: "NOMINAL",
+    cls:       "nominal",
+    icon:      "✓",
+  },
+  alert: {
+    label:     "Alert",
+    chipLabel: "ALERT",
+    cls:       "alert",
+    icon:      "⚠",
+  },
+  degraded: {
+    label:     "Degraded",
+    chipLabel: "DEGRADED",
+    cls:       "degraded",
+    icon:      "⊘",
+  },
+  ground_supported: {
+    label:     "Ground-supported",
+    chipLabel: "GROUND-SUPPORTED",
+    cls:       "ground",
+    icon:      "⊕",
+  },
 };
 
-// ── Parameter threshold limits (mirrors ParameterLimits.md) ──
-// Fields: low_crit, low_warn, low_advisory, high_advisory, high_warn, high_crit
+// ── Activity status (VD-R05) — profile labels match backend `scenario` keys ──
+const ACTIVITY_PROFILE_KEYS = new Set(["nominal", "exercise", "stress", "sleep"]);
+
+/** Display line: "Rest · IVA" / "Exercise · EVA" — same string on overview cards and detail trigger. */
+function formatActivityStatus(profileKey, locationKey) {
+  const sl = PROFILE_SCENARIO_SHORT[profileKey] || profileKey;
+  const loc = locationKey === "eva" ? "EVA" : "IVA";
+  return `${sl} · ${loc}`;
+}
+
+/** Each interplanetary transit leg (VD: situation awareness for mission day). */
+const MISSION_LEG_DAYS = 210;
+
+/**
+ * @returns {{ phase: 1 | 2 | 'post', phaseTitle: string, dayInLeg: number, legDays: number | null, progressFromEarthPct: number }}
+ */
+function missionTransitFromDay(missionDay) {
+  const md = Math.max(1, Math.floor(Number(missionDay)) || 1);
+  const span = Math.max(1, MISSION_LEG_DAYS - 1);
+
+  if (md <= MISSION_LEG_DAYS) {
+    const progressFromEarthPct = ((md - 1) / span) * 100;
+    return {
+      phase: 1,
+      phaseTitle: "Transit Outbound",
+      dayInLeg: md,
+      legDays: MISSION_LEG_DAYS,
+      progressFromEarthPct,
+    };
+  }
+  if (md <= MISSION_LEG_DAYS * 2) {
+    const dayInLeg = md - MISSION_LEG_DAYS;
+    const progressFromEarthPct = (1 - (dayInLeg - 1) / span) * 100;
+    return {
+      phase: 2,
+      phaseTitle: "Transit Return",
+      dayInLeg,
+      legDays: MISSION_LEG_DAYS,
+      progressFromEarthPct,
+    };
+  }
+  return {
+    phase: "post",
+    phaseTitle: "Post-transit",
+    dayInLeg: md,
+    legDays: null,
+    progressFromEarthPct: 0,
+  };
+}
+
+function renderMissionTransit(missionDay) {
+  const ctx = missionTransitFromDay(missionDay);
+  const titleEl = el("mission-phase-title");
+  const badgeEl = el("mission-day-badge");
+  const fillEl = el("mission-track-fill");
+  const pinEl = el("mission-track-pin");
+  const trackEl = el("mission-track");
+
+  if (titleEl) titleEl.textContent = ctx.phaseTitle;
+  if (badgeEl) {
+    if (ctx.phase === "post") {
+      badgeEl.textContent = `MD ${missionDay}`;
+      badgeEl.setAttribute("aria-label", `Mission day ${missionDay}`);
+    } else {
+      badgeEl.textContent = `MD ${ctx.dayInLeg}/${ctx.legDays}`;
+      badgeEl.setAttribute("aria-label", `Mission day ${ctx.dayInLeg} of ${ctx.legDays} in current transit leg`);
+    }
+  }
+  const pct = Math.min(100, Math.max(0, ctx.progressFromEarthPct));
+  if (fillEl) fillEl.style.width = `${pct}%`;
+  if (pinEl) pinEl.style.left = `${pct}%`;
+  if (trackEl) {
+    const pctRounded = Math.round(pct);
+    if (ctx.phase === "post") {
+      trackEl.setAttribute(
+        "aria-label",
+        `Mission day ${missionDay}. ${ctx.phaseTitle}. Crew position shown at Earth (start of scale).`,
+      );
+    } else {
+      trackEl.setAttribute(
+        "aria-label",
+        `${ctx.phaseTitle}. Progress along the Earth-to-Mars corridor: ${pctRounded} percent from Earth on the left toward Mars on the right.`,
+      );
+    }
+  }
+}
+
+// ── Parameter threshold limits (mirrors 7_parameter_limits.md) ──
+// Two display tiers only: low_caution / high_caution (amber) and low_warn / high_warn (red).
 // null = not applicable.  Operator: low_* triggers if value < threshold,
 // high_* triggers if value > threshold.
 const PARAM_LIMITS = {
-  heart_rate_bpm:           { low_crit: 40,  low_warn: 45,   high_warn: 120,  high_crit: 130  },
-  blood_pressure_sys_mmhg:  { low_crit: 80,                  high_crit: 170                    },
-  spo2_pct:                 { low_crit: 92                                                      },
-  respiration_rate_bpm:     { low_crit: 8,                   high_warn: 24                     },
-  body_temperature_c:       { low_warn: 35,                  high_warn: 38                     },
-  cabin_co2_mmhg:           {                high_advisory: 6, high_warn: 8                    },
-  cabin_temperature_c:      { low_warn: 18,                  high_warn: 27                     },
-  cabin_humidity_pct:       { low_warn: 25,                  high_warn: 75                     },
-  radiation_cumulative_msv: {                high_advisory: 50, high_warn: 150                 },
-  personal_co2_ppm:         {                high_advisory: 1000, high_warn: 2500              },
+  heart_rate_bpm:           { low_warn: 40,  low_caution: 45,  high_caution: 120, high_warn: 130 },
+  blood_pressure_sys_mmhg:  { low_warn: 80,  low_caution: 90,  high_caution: 160, high_warn: 170 },
+  spo2_pct:                 { low_warn: 92,  low_caution: 94                                      },
+  respiration_rate_bpm:     { low_warn: 8,   low_caution: 10,  high_caution: 20,  high_warn: 24  },
+  body_temperature_c:       { low_warn: 35,  low_caution: 36,  high_caution: 37.5, high_warn: 38 },
+  cabin_co2_mmhg:           {                high_caution: 6,  high_warn: 8                       },
+  cabin_temperature_c:      { low_warn: 18,  low_caution: 19,  high_caution: 26,  high_warn: 27  },
+  cabin_humidity_pct:       { low_warn: 25,  low_caution: 30,  high_caution: 70,  high_warn: 75  },
+  radiation_cumulative_msv: {                high_caution: 50, high_warn: 150                     },
+  personal_co2_ppm:         {                high_caution: 1000, high_warn: 2500                  },
+};
+
+// ── Parameter display ranges (for arc gauge, band indicator, mini bar) ───────
+// Covers the full clinically/operationally meaningful range, not just nominal.
+const PARAM_RANGES = {
+  heart_rate_bpm:           { min: 30,   max: 180 },
+  spo2_pct:                 { min: 80,   max: 100 },
+  respiration_rate_bpm:     { min: 4,    max: 36  },
+  body_temperature_c:       { min: 33.0, max: 40.0 },
+  blood_pressure_sys_mmhg:  { min: 60,   max: 200 },
+  cabin_co2_mmhg:           { min: 0,    max: 12  },
+  cabin_temperature_c:      { min: 14,   max: 32  },
+  cabin_humidity_pct:       { min: 10,   max: 90  },
+  radiation_cumulative_msv: { min: 0,    max: 200 },
 };
 
 /**
+ * Returns the highest-triggered display tier for a parameter reading.
+ * Returns: 'warning' (red) | 'caution' (amber) | null (nominal)
+ * VD-R03: two display tiers only (Caution / Warning), matched 1-to-1 to alert palette.
+ */
+function paramSeverity(paramId, v) {
+  const lim = PARAM_LIMITS[paramId];
+  if (!lim || v == null || isNaN(v)) return null;
+  if ((lim.low_warn    != null && v < lim.low_warn)    ||
+      (lim.high_warn   != null && v > lim.high_warn))   return 'warning';
+  if ((lim.low_caution != null && v < lim.low_caution) ||
+      (lim.high_caution!= null && v > lim.high_caution)) return 'caution';
+  return null;
+}
+
+/**
  * Map a numeric reading to a CSS colour class based on PARAM_LIMITS.
- * Returns: 'good' (green) | 'medium' (yellow) | 'low' (red) | '' (no limit defined)
+ * Returns: 'good' | 'medium' (caution/amber) | 'low' (warning/red) | ''
+ * VD-R03: two tiers — caution → amber ('medium'), warning → red ('low').
  */
 function paramClass(paramId, v) {
-  const lim = PARAM_LIMITS[paramId];
-  if (!lim || v == null || isNaN(v)) return '';
-  if ((lim.low_crit  != null && v < lim.low_crit)  ||
-      (lim.high_crit != null && v > lim.high_crit)) return 'low';
-  if ((lim.low_warn  != null && v < lim.low_warn)  ||
-      (lim.high_warn != null && v > lim.high_warn)) return 'medium';
-  if ((lim.low_advisory  != null && v < lim.low_advisory)  ||
-      (lim.high_advisory != null && v > lim.high_advisory)) return 'medium';
-  return 'good';
+  const sev = paramSeverity(paramId, v);
+  if (sev === 'warning') return 'low';
+  if (sev === 'caution') return 'medium';
+  if (sev === null && PARAM_LIMITS[paramId]) return 'good';
+  return '';
 }
 
 // ── Score → description + relevant sensors ──────────
@@ -189,6 +322,34 @@ const SCORE_DETAILS = {
           { label: "Personal cumul.", param: "radiation_cumulative_msv", num: d => d.personal_cumulative_msv, get: d => fv(d.personal_cumulative_msv.toFixed(1), d.dose_unit) },
         ]},
     ],
+  },
+};
+
+// ── Score advice text (8_medical_diagnosis.md §4.7) ──────────────────────────
+const SCORE_ADVICE = {
+  health_score: {
+    caution: "Review cardiovascular parameters (HR, SpO₂, BP) and core body temperature in the sensor rows below. Note HRV trend. If any raw vital is also alarming, refer to the corresponding alert in the Alerts panel.",
+    warning: "Review cardiovascular parameters (HR, SpO₂, BP) and core body temperature in the sensor rows below. Note HRV trend. If any raw vital is also alarming, refer to the corresponding alert in the Alerts panel. Notify Flight Surgeon at next contact with score value and which sensor parameters are flagged.",
+  },
+  sleep_score: {
+    caution: "Prioritise sleep opportunity in the next duty cycle. Review sleep architecture (deep %, REM %) and wake episodes. Reduce bright light exposure before the sleep period.",
+    warning: "Prioritise sleep opportunity in the next duty cycle. Review sleep architecture (deep %, REM %) and wake episodes. Reduce bright light exposure before the sleep period. If sleep score remains below 60 after two consecutive duty cycles, notify Flight Surgeon for evaluation of sleep disruption.",
+  },
+  activity_score: {
+    caution: "Review duty schedule for prolonged sedentary periods. Schedule moderate exercise to prevent musculoskeletal deconditioning per the mission exercise protocol.",
+    warning: "Review duty schedule for prolonged sedentary periods. Schedule moderate exercise to prevent musculoskeletal deconditioning per the mission exercise protocol. Sustained low activity score indicates deconditioning risk; notify Flight Surgeon for exercise prescription review.",
+  },
+  fatigue_score: {
+    caution: "Increase rest time and prioritise high-quality sleep in the next cycle. Review HRV and wake episodes as recovery indicators.",
+    warning: "Defer high-criticality tasks where operationally possible. Notify Flight Surgeon if score remains below 60 after two sleep cycles.",
+  },
+  stress_management_score: {
+    caution: "Reduce non-essential workload and environmental stressors (noise, time pressure). Review resting HR and HRV trend for autonomic load indicators. If personal CO₂ is elevated, address that first.",
+    warning: "Reduce non-essential workload and environmental stressors (noise, time pressure). Review resting HR and HRV trend for autonomic load indicators. If personal CO₂ is elevated, address that first. Notify Flight Surgeon at next contact with score value and contributing sensor context.",
+  },
+  readiness_score: {
+    caution: "Defer safety-critical solo tasks where possible. Review contributing scores (Sleep, Health, Stress Management) to identify the primary driver and apply the corresponding advice above.",
+    warning: "Do not assign solo or safety-critical tasks to the crew member. Notify Flight Surgeon at next scheduled contact.",
   },
 };
 
@@ -397,11 +558,11 @@ function bindChatEvents() {
 // (Mock / prototype descriptions seeded from live values)
 // ══════════════════════════════════════════════════════
 
-/** Map a 0–100 score to a clinical adjective. */
+/** Map a 0–100 score to a clinical adjective (aligned with 70/60 Caution/Warning thresholds). */
 function rateScore(v) {
   if (v >= 85) return { word: "excellent",    cls: "flag-ok"      };
-  if (v >= 70) return { word: "satisfactory", cls: "flag-ok"      };
-  if (v >= 55) return { word: "moderate",     cls: "flag-caution" };
+  if (v >  70) return { word: "satisfactory", cls: "flag-ok"      };
+  if (v >= 60) return { word: "caution",      cls: "flag-caution" };
   return             { word: "below target",  cls: "flag-warn"    };
 }
 
@@ -417,7 +578,10 @@ function rateHtml(score, label) {
 
 function nowTs(missionDay) {
   const t = new Date();
-  return `Mission Day ${missionDay} · ${t.toLocaleTimeString(undefined,{hour:'2-digit',minute:'2-digit',hour12:false})} UTC`;
+  const tr = missionTransitFromDay(missionDay);
+  const mdPart =
+    tr.phase === "post" ? `MD ${missionDay}` : `MD ${tr.dayInLeg}/${tr.legDays}`;
+  return `${mdPart} · ${t.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hour12: false })} UTC`;
 }
 
 // ── (1) Overview: four-crew mission health brief ─────
@@ -441,21 +605,98 @@ function generateOverviewReport(data) {
   return `Mission Day ${val(mission_day)} — ${ok('All four crew members are tracking within nominal physiological and environmental bounds')}.`;
 }
 
-// ── (2) Crew detail: individual health summary ────────
-function generateCrewReport(data) {
-  const { wearable: w, devices: d, alerts, display_name, mission_day } = data;
+// ── (2) Crew detail: GPT-4o symptom summary + recommended actions ─────────
+// Called after openDetail() populates lastDetailData.
+// Fires a single POST /api/crew/assessment and updates two separate panels.
+async function fetchAndRenderAssessment(data) {
+  // Reset both panels to loading state
+  const summaryEl  = el('crew-report-text');
+  const actSection = el('actions-section');
+  const actLoading = el('actions-loading');
+  const actList    = el('actions-list');
 
-  const overall = rateScore(w.health_score);
-  const rhr     = d.bio_monitor.resting_heart_rate_bpm;
-  const hrv     = d.oura_ring.hrv_ms;
+  summaryEl.innerHTML = '<span class="hmu-spinner"></span>Generating clinical assessment…';
+  summaryEl.classList.add('hmu-report-loading');
+  actSection.classList.remove('hidden');
+  actList.innerHTML    = '';
+  actLoading.classList.remove('hidden');
+  el('crew-report-ts').textContent = '';
 
-  const alertPart = alerts.length === 0
-    ? `no active alerts`
-    : `${warn(alerts.length + ' active alert' + (alerts.length > 1 ? 's' : ''))}`;
+  // Build a lightweight payload (only what GPT-4o needs)
+  const payload = {
+    display_name:  data.display_name,
+    role:          el('detail-role')?.textContent?.trim() ?? '',
+    mission_day:   data.mission_day,
+    alerts:        data.alerts.map(a => ({
+      severity:  a.severity,
+      title:     a.title,
+      parameter: a.parameter ?? '',
+      value:     a.value     ?? '',
+      threshold: a.threshold ?? '',
+    })),
+    wearable:      {
+      health_score:             data.wearable.health_score,
+      sleep_score:              data.wearable.sleep_score,
+      fatigue_score:            data.wearable.fatigue_score,
+      stress_management_score:  data.wearable.stress_management_score,
+      readiness_score:          data.wearable.readiness_score,
+      heart_rate_bpm:           data.wearable.heart_rate_bpm,
+      spo2_pct:                 data.wearable.spo2_pct,
+      systolic_mmhg:            data.wearable.systolic_mmhg,
+      diastolic_mmhg:           data.wearable.diastolic_mmhg,
+      respiratory_rate_bpm:     data.wearable.respiratory_rate_bpm,
+    },
+    environmental: {
+      cabin_co2_mmhg:              data.environmental.cabin_co2_mmhg,
+      cabin_temp_c:                data.environmental.cabin_temp_c,
+      cabin_humidity_pct:          data.environmental.cabin_humidity_pct,
+      mission_cumulative_dose_msv: data.environmental.mission_cumulative_dose_msv,
+    },
+  };
 
-  return `${val(display_name)} — health <span class="${overall.cls}">${w.health_score}/100 (${overall.word})</span> on Day ${val(mission_day)}: `
-    + `resting HR ${val(rhr.toFixed(0) + ' bpm')}, SpO₂ ${val(w.spo2_pct.toFixed(0) + '%')}, `
-    + `HRV ${val(hrv.toFixed(0) + ' ms')}, sleep ${val(w.sleep_score + '/100')}, fatigue ${val(w.fatigue_score + '/100')} — ${alertPart}.`;
+  try {
+    const res = await fetch('/api/crew/assessment', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: res.statusText }));
+      summaryEl.innerHTML = `<span class="flag-warn">[Error ${res.status}] ${escapeHtml(err.detail ?? 'Assessment unavailable')}</span>`;
+      actLoading.classList.add('hidden');
+      return;
+    }
+
+    const { summary, actions } = await res.json();
+
+    // ── Symptom summary ───────────────────────────────
+    summaryEl.classList.remove('hmu-report-loading');
+    summaryEl.textContent = summary || 'No summary available.';
+    el('crew-report-ts').textContent = nowTs(data.mission_day);
+
+    // ── Recommended actions ───────────────────────────
+    actLoading.classList.add('hidden');
+    if (!actions || actions.length === 0) {
+      actSection.classList.add('hidden');
+      return;
+    }
+    const severityCls = data.alerts.some(a => a.severity === 'emergency') ? 'actions-emergency'
+                      : data.alerts.some(a => a.severity === 'warning')   ? 'actions-warning'
+                      : '';
+    actList.className = `actions-list ${severityCls}`;
+    actList.innerHTML = actions.map((act, i) =>
+      `<li class="action-item">
+        <span class="action-num">${i + 1}</span>
+        <span class="action-text">${escapeHtml(act)}</span>
+      </li>`
+    ).join('');
+
+  } catch (networkErr) {
+    summaryEl.classList.remove('hmu-report-loading');
+    summaryEl.innerHTML = `<span class="flag-warn">Unable to reach assessment service — check server connection.</span>`;
+    actLoading.classList.add('hidden');
+  }
 }
 
 // ── (3) Score detail: per-score clinical assessment ───
@@ -528,13 +769,11 @@ function generateScoreReport(scoreKey, wearable, devices, missionDay) {
 
 // ── Report renderers ──────────────────────────────────
 function renderOverviewReport(data) {
-  el('overview-report-text').innerHTML = generateOverviewReport(data);
-  el('overview-report-ts').textContent = nowTs(data.mission_day);
-}
-
-function renderCrewReport(data) {
-  el('crew-report-text').innerHTML = generateCrewReport(data);
-  el('crew-report-ts').textContent = nowTs(data.mission_day);
+  el("overview-report-text").innerHTML = generateOverviewReport(data);
+  el("overview-report-ts").textContent = nowTs(data.mission_day);
+  const rep = el("overview-report");
+  const modeCls = MODES[data.mode]?.cls || "nominal";
+  rep.className = `hmu-report hmu-report--mode-${modeCls}`;
 }
 
 function renderScoreReportPanel(scoreKey, wearable, devices, missionDay) {
@@ -573,7 +812,7 @@ function escapeHtml(s) {
 
 function formatDate(d)  { return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" }); }
 function formatTime(d)  { return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false }); }
-function scoreClass(v)  { return v > 80 ? "good" : v >= 60 ? "medium" : "low"; }
+function scoreClass(v)  { return v > 70 ? "good" : v >= 60 ? "medium" : "low"; }
 function initials(name) { const p = name.trim().split(/\s+/); return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : name.slice(0,2).toUpperCase(); }
 
 // ── Clock ────────────────────────────────────────────
@@ -583,18 +822,159 @@ function tickClock() {
   el("mission-date").textContent = formatDate(now);
 }
 
-// ── Mode chips ───────────────────────────────────────
-function renderModeChips(activeMode, containerId = "mode-chips") {
-  const c = el(containerId);
-  if (!c) return;
-  c.innerHTML = "";
-  Object.entries(MODES).forEach(([key, { label, cls }]) => {
-    const s = document.createElement("span");
-    s.className = "mode-chip" + (key === activeMode ? ` active ${cls}` : "");
-    s.textContent = label;
-    if (key === activeMode) s.setAttribute("aria-current", "true");
-    c.appendChild(s);
+// ── Mission mode (aggregated): single label matching meta-value style (VD-R06) ──
+function renderMissionMode(activeMode) {
+  const node = el("mode-value");
+  if (!node) return;
+  const m = MODES[activeMode] || MODES.nominal_monitoring;
+  node.className = `mode-display mode-display--${m.cls}`;
+  node.innerHTML = `<span class="mode-display-icon" aria-hidden="true">${m.icon}</span><span class="mode-display-text">${m.chipLabel}</span>`;
+  node.setAttribute("aria-label", `Operational mode: ${m.label}`);
+}
+
+/** Per-crew activity profile (`scenario` in API) from last overview. */
+function scenarioForCrew(crewId) {
+  const row = lastOverview?.crew?.find((c) => c.crew_member_id === crewId);
+  return row?.scenario ?? "nominal";
+}
+
+/** Per-crew IVA/EVA from last overview. */
+function locationForCrew(crewId) {
+  const row = lastOverview?.crew?.find((c) => c.crew_member_id === crewId);
+  return row?.location === "eva" ? "eva" : "iva";
+}
+
+/** Short labels for activity profile (matches backend `scenario` keys). */
+const PROFILE_SCENARIO_SHORT = {
+  nominal:  "Rest",
+  stress:   "High workload",
+  exercise: "Exercise",
+  sleep:    "Sleep",
+};
+
+/** CSS class suffix for colored profile chip (matches `.scenario-*` in CSS). */
+function activityProfileChipClass(key) {
+  const m = {
+    nominal:  "scenario-nominal",
+    exercise: "scenario-exercise",
+    stress:   "scenario-stress",
+    sleep:    "scenario-sleep",
+  };
+  return `activity-profile-chip ${m[key] || "scenario-nominal"}`;
+}
+
+let detailCrewId      = null;
+let detailScenarioKey = "nominal";
+let detailLocationKey = "iva";
+
+function updateDetailStatusTriggerText() {
+  const trig = el("detail-status-trigger");
+  if (!trig) return;
+  const label = escapeHtml(PROFILE_SCENARIO_SHORT[detailScenarioKey] || detailScenarioKey);
+  const loc = detailLocationKey === "eva" ? "EVA" : "IVA";
+  const chipCls = activityProfileChipClass(detailScenarioKey);
+  const locCls =
+    detailLocationKey === "eva"
+      ? "activity-location-inline activity-location-inline--eva"
+      : "activity-location-inline";
+  trig.innerHTML = `<span class="${chipCls}">${label}</span><span class="${locCls}"> · ${loc}</span>`;
+}
+
+function renderDetailStatusUI() {
+  updateDetailStatusTriggerText();
+  el("detail-scenario-group")?.querySelectorAll(".detail-scenario-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.scenario === detailScenarioKey);
   });
+  el("detail-location-group")?.querySelectorAll(".detail-location-btn").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.location === detailLocationKey);
+  });
+}
+
+function closeDetailStatusPopover() {
+  const pop = el("detail-status-popover");
+  const trig = el("detail-status-trigger");
+  if (pop && !pop.classList.contains("hidden")) {
+    pop.classList.add("hidden");
+    if (trig) trig.setAttribute("aria-expanded", "false");
+  }
+}
+
+function toggleDetailStatusPopover() {
+  const pop = el("detail-status-popover");
+  const trig = el("detail-status-trigger");
+  if (!pop || !trig) return;
+  pop.classList.toggle("hidden");
+  const open = !pop.classList.contains("hidden");
+  trig.setAttribute("aria-expanded", String(open));
+}
+
+async function loadCrewDetailData() {
+  if (!detailCrewId) return;
+  el("score-detail-panel")?.classList.add("hidden");
+  destroyScoreChart();
+  selectedScore = null;
+
+  const r = await fetch(
+    `/api/crew/${encodeURIComponent(detailCrewId)}/detail?scenario=${encodeURIComponent(detailScenarioKey)}&location=${encodeURIComponent(detailLocationKey)}`,
+  );
+  if (!r.ok) throw new Error(await r.text());
+  const data = await r.json();
+  lastDetailData = data;
+  if (data.scenario_assumption) detailScenarioKey = data.scenario_assumption;
+  if (data.location) detailLocationKey = data.location;
+
+  renderDeviceStatusBar(data.devices);
+  renderScoreCards(data.wearable);
+  renderAlerts(data.alerts);
+  renderDetailStatusUI();
+  initChat(detailCrewId);
+  fetchAndRenderAssessment(data).catch(console.error);
+}
+
+function onDetailStatusOutsideClick(e) {
+  const wrap = el("detail-header-status-wrap");
+  const pop = el("detail-status-popover");
+  const panel = el("detail-panel");
+  if (!wrap || !pop || pop.classList.contains("hidden")) return;
+  if (!panel || panel.classList.contains("hidden")) return;
+  if (wrap.contains(e.target)) return;
+  closeDetailStatusPopover();
+}
+
+function bindDetailStatusPopover() {
+  el("detail-status-trigger")?.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleDetailStatusPopover();
+  });
+  el("detail-scenario-group")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".detail-scenario-btn");
+    if (!btn || !detailCrewId) return;
+    e.stopPropagation();
+    const next = btn.dataset.scenario;
+    if (!next || next === detailScenarioKey) return;
+    detailScenarioKey = next;
+    try {
+      await loadCrewDetailData();
+    } catch (err) {
+      console.error(err);
+    }
+    closeDetailStatusPopover();
+  });
+  el("detail-location-group")?.addEventListener("click", async (e) => {
+    const btn = e.target.closest(".detail-location-btn");
+    if (!btn || !detailCrewId) return;
+    e.stopPropagation();
+    const next = btn.dataset.location;
+    if (!next || next === detailLocationKey) return;
+    detailLocationKey = next;
+    try {
+      await loadCrewDetailData();
+    } catch (err) {
+      console.error(err);
+    }
+    closeDetailStatusPopover();
+  });
+  document.addEventListener("mousedown", onDetailStatusOutsideClick);
 }
 
 // ── Crew board (overview) ────────────────────────────
@@ -603,11 +983,17 @@ function renderCrewBoard(data) {
   board.innerHTML = "";
   data.crew.forEach((c) => {
     const modeCls = MODES[c.mode]?.cls || "nominal";
+    const scenKey = ACTIVITY_PROFILE_KEYS.has(c.scenario) ? c.scenario : "nominal";
+    const locKey = c.location === "eva" ? "eva" : "iva";
+    const activityLine = formatActivityStatus(scenKey, locKey);
     const card    = document.createElement("article");
     card.className = `crew-card mode-${modeCls}`;
     card.tabIndex  = 0;
     card.setAttribute("role", "button");
-    card.setAttribute("aria-label", `${c.display_name}, ${c.role}. Open detail.`);
+    card.setAttribute(
+      "aria-label",
+      `${c.display_name}, ${c.role}. ${activityLine}. Open detail.`,
+    );
     card.innerHTML = `
       <div class="avatar-ring ${modeCls}">
         <div class="avatar-inner">
@@ -618,6 +1004,12 @@ function renderCrewBoard(data) {
       <h2 class="crew-name">${escapeHtml(c.display_name)}</h2>
       <p class="crew-role-txt">${escapeHtml(c.role)}</p>
       <span class="crew-id-badge">${escapeHtml(c.crew_member_id)}</span>
+      <div class="crew-activity-status">
+        <div class="crew-activity-status-split">
+          <span class="${activityProfileChipClass(scenKey)}">${escapeHtml(PROFILE_SCENARIO_SHORT[scenKey] || scenKey)}</span>
+          <span class="crew-activity-location${locKey === "eva" ? " crew-activity-location--eva" : ""}">${locKey === "eva" ? "EVA" : "IVA"}</span>
+        </div>
+      </div>
       <div class="crew-scores">
         <div class="score-row"><span class="s-label">Health</span><span class="s-value ${scoreClass(c.health_score)}">${c.health_score}</span></div>
         <div class="score-row"><span class="s-label">Sleep</span><span class="s-value ${scoreClass(c.sleep_score)}">${c.sleep_score}</span></div>
@@ -639,17 +1031,203 @@ function renderCrewBoard(data) {
 function renderHabitat(data) {
   const env = data.environmental;
   el("habitat-row").innerHTML = [
-    habCard("CO₂",         env.cabin_co2_mmhg.toFixed(2),              env.co2_unit,      "cabin_co2_mmhg",           env.cabin_co2_mmhg),
-    habCard("Temperature", env.cabin_temp_c.toFixed(1),                env.temp_unit,     "cabin_temperature_c",      env.cabin_temp_c),
-    habCard("Humidity",    env.cabin_humidity_pct.toFixed(0),          env.humidity_unit, "cabin_humidity_pct",       env.cabin_humidity_pct),
-    habCard("Cumul. dose", env.mission_cumulative_dose_msv.toFixed(1), env.dose_unit,     "radiation_cumulative_msv", env.mission_cumulative_dose_msv),
+    habGaugeCard("CO₂",         env.co2_unit,      "cabin_co2_mmhg",      env.cabin_co2_mmhg),
+    habBandCard ("Temperature",  env.cabin_temp_c.toFixed(1),       env.temp_unit,     "cabin_temperature_c", env.cabin_temp_c),
+    habBandCard ("Humidity",     env.cabin_humidity_pct.toFixed(0), env.humidity_unit, "cabin_humidity_pct",  env.cabin_humidity_pct),
+    radiationHabCard(env.mission_cumulative_dose_msv.toFixed(1), env.dose_unit, env.mission_cumulative_dose_msv),
   ].join("");
   el("habitat-integrity").textContent = `Environmental sensor integrity: ${data.integrity_environmental}`;
 }
 
+// ══════════════════════════════════════════════════════
+// Visual modality rendering functions
+// ══════════════════════════════════════════════════════
+
+/**
+ * ARC_GAUGE — 270° SVG arc gauge with caution/warning tick marks.
+ * Arc sweeps clockwise from 135° (7:30) through top to 45° (4:30).
+ * Returns an SVG string. viewBox="0 0 100 72".
+ */
+function arcGaugeSvg(paramId, rawNum) {
+  const rng = PARAM_RANGES[paramId];
+  const lim = PARAM_LIMITS[paramId];
+  if (!rng || !lim || rawNum == null) return '';
+
+  const { min, max } = rng;
+  const sev     = paramSeverity(paramId, rawNum);
+  const fillHex = sev === 'warning' ? '#f85149' : sev === 'caution' ? '#d29922' : '#3fb950';
+  const c01     = v => Math.max(0, Math.min(1, v));
+
+  const cx = 50, cy = 42, r = 36, sw = 7;
+  const START = 135, SWEEP = 270;
+  const valDeg = START + c01((rawNum - min) / (max - min)) * SWEEP;
+
+  function pt(deg) {
+    const rad = deg * Math.PI / 180;
+    return [cx + r * Math.cos(rad), cy + r * Math.sin(rad)];
+  }
+  function arcD(s, e) {
+    const [sx, sy] = pt(s), [ex, ey] = pt(e);
+    let d = e - s; while (d < 0) d += 360; while (d > 360) d -= 360;
+    return `M${sx.toFixed(2)},${sy.toFixed(2)} A${r},${r} 0 ${d > 180 ? 1 : 0},1 ${ex.toFixed(2)},${ey.toFixed(2)}`;
+  }
+
+  const ticks = [
+    [lim.low_warn,    '#f85149'], [lim.low_caution,  '#d29922'],
+    [lim.high_caution,'#d29922'], [lim.high_warn,    '#f85149'],
+  ].filter(([v]) => v != null && v > min && v < max)
+   .map(([v, tc]) => {
+     const deg = START + c01((v - min) / (max - min)) * SWEEP;
+     const rad = deg * Math.PI / 180;
+     const r1 = r - sw / 2 - 1, r2 = r + sw / 2 + 2;
+     return `<line x1="${(cx+r1*Math.cos(rad)).toFixed(1)}" y1="${(cy+r1*Math.sin(rad)).toFixed(1)}"
+                   x2="${(cx+r2*Math.cos(rad)).toFixed(1)}" y2="${(cy+r2*Math.sin(rad)).toFixed(1)}"
+               stroke="${tc}" stroke-width="2" stroke-linecap="round"/>`;
+   }).join('');
+
+  return `<svg class="gauge-svg" viewBox="0 0 100 72" aria-hidden="true">
+    <path d="${arcD(START, START + SWEEP - 0.01)}" fill="none" stroke="#21262d" stroke-width="${sw}" stroke-linecap="round"/>
+    ${c01((rawNum - min)/(max - min)) > 0.003 ? `<path d="${arcD(START, valDeg)}" fill="none" stroke="${fillHex}" stroke-width="${sw}" stroke-linecap="round"/>` : ''}
+    ${ticks}
+    <text x="50" y="40" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="700" fill="${fillHex}" font-family="inherit">${rawNum}</text>
+  </svg>`;
+}
+
+/**
+ * BAND_INDICATOR — 5-zone horizontal band with sliding cursor.
+ * Zones left→right: Warning-Low · Caution-Low · OK · Caution-High · Warning-High.
+ * Returns an HTML string.
+ */
+function bandIndicatorHtml(paramId, rawNum) {
+  const rng = PARAM_RANGES[paramId];
+  const lim = PARAM_LIMITS[paramId];
+  if (!rng || !lim || rawNum == null) return '';
+
+  const { min, max } = rng;
+  const total = max - min;
+  const c01   = v => Math.max(0, Math.min(1, v));
+  const pct   = (a, b) => (c01((b - a) / total) * 100).toFixed(2) + '%';
+
+  const loW = lim.low_warn    ?? min;
+  const loC = lim.low_caution ?? loW;
+  const hiC = lim.high_caution ?? max;
+  const hiW = lim.high_warn   ?? hiC;
+
+  const sev     = paramSeverity(paramId, rawNum);
+  const zoneTxt = !sev ? 'IN RANGE'
+                : rawNum < loC ? 'LOW' : rawNum > hiC ? 'HIGH' : 'NEAR LIMIT';
+  const zoneCls = !sev ? 'zone-ok' : sev === 'warning' ? 'zone-warning' : 'zone-caution';
+  const curPct  = (c01((rawNum - min) / total) * 100).toFixed(2);
+
+  return `<div class="band-ind">
+    <div class="band-track">
+      <div class="band-seg bs-w" style="flex:0 0 ${pct(min, loW)}"></div>
+      <div class="band-seg bs-c" style="flex:0 0 ${pct(loW, loC)}"></div>
+      <div class="band-seg bs-o" style="flex:0 0 ${pct(loC, hiC)}"></div>
+      <div class="band-seg bs-c" style="flex:0 0 ${pct(hiC, hiW)}"></div>
+      <div class="band-seg bs-w" style="flex:0 0 ${pct(hiW, max)}"></div>
+      <div class="band-cursor" style="left:${curPct}%"></div>
+    </div>
+    <div class="band-zone-txt ${zoneCls}">${zoneTxt}</div>
+  </div>`;
+}
+
+/**
+ * Mini progress bar for sensor rows — shows value position in the param range
+ * with caution/warning tick marks. 4px height, spans full row width.
+ */
+function sensorMiniBar(paramId, rawNum) {
+  const rng = PARAM_RANGES[paramId];
+  const lim = PARAM_LIMITS[paramId];
+  if (!rng || !lim || rawNum == null) return '';
+
+  const { min, max } = rng;
+  const c01     = v => Math.max(0, Math.min(1, v));
+  const fillPct = (c01((rawNum - min) / (max - min)) * 100).toFixed(1);
+  const sev     = paramSeverity(paramId, rawNum);
+  const cls     = sev === 'warning' ? 'mb-w' : sev === 'caution' ? 'mb-c' : 'mb-g';
+
+  const ticks = [
+    [lim.low_warn,    'mb-w'], [lim.low_caution,  'mb-c'],
+    [lim.high_caution,'mb-c'], [lim.high_warn,    'mb-w'],
+  ].filter(([v]) => v != null && v > min && v < max)
+   .map(([v, tc]) => {
+     const lp = (c01((v - min) / (max - min)) * 100).toFixed(1);
+     return `<div class="mb-tick ${tc}" style="left:${lp}%"></div>`;
+   }).join('');
+
+  return `<div class="sdp-mini-bar"><div class="mb-track"><div class="mb-fill ${cls}" style="width:${fillPct}%"></div>${ticks}</div></div>`;
+}
+
+// ── Habitat card builders ─────────────────────────────
+
+/**
+ * Standard hab card — label + value + severity badge (VD-R02: color + text word).
+ */
 function habCard(label, value, unit, paramId, rawNum) {
   const cls = paramClass(paramId, rawNum);
-  return `<div class="hab-card"><span class="hab-label">${label}</span><span class="hab-value ${cls}">${value}<span class="hab-unit">${unit}</span></span></div>`;
+  const sev = paramSeverity(paramId, rawNum);
+  const badge = sev ? `<span class="hab-severity-badge ${sev}">${sev.toUpperCase()}</span>` : '';
+  return `<div class="hab-card${sev ? ' hab-' + sev : ''}">
+    <div class="hab-card-top"><span class="hab-label">${label}</span>${badge}</div>
+    <span class="hab-value ${cls}">${value}<span class="hab-unit">${unit}</span></span>
+  </div>`;
+}
+
+/**
+ * ARC_GAUGE hab card — label + arc gauge SVG + unit (for CO₂).
+ * Number is rendered inside the SVG; no separate hab-value span needed.
+ */
+function habGaugeCard(label, unit, paramId, rawNum) {
+  const sev   = paramSeverity(paramId, rawNum);
+  const badge = sev ? `<span class="hab-severity-badge ${sev}">${sev.toUpperCase()}</span>` : '';
+  return `<div class="hab-card hab-card-gauge${sev ? ' hab-' + sev : ''}">
+    <div class="hab-card-top"><span class="hab-label">${label}</span>${badge}</div>
+    ${arcGaugeSvg(paramId, rawNum)}
+    <span class="hab-unit-label">${unit}</span>
+  </div>`;
+}
+
+/**
+ * BAND_INDICATOR hab card (temperature, humidity) — value + 5-zone band with cursor.
+ * VD-R10: relative judgment ("where in the band?") without recalling two limits.
+ */
+function habBandCard(label, value, unit, paramId, rawNum) {
+  const cls   = paramClass(paramId, rawNum);
+  const sev   = paramSeverity(paramId, rawNum);
+  const badge = sev ? `<span class="hab-severity-badge ${sev}">${sev.toUpperCase()}</span>` : '';
+  return `<div class="hab-card${sev ? ' hab-' + sev : ''}">
+    <div class="hab-card-top"><span class="hab-label">${label}</span>${badge}</div>
+    <span class="hab-value ${cls}">${value}<span class="hab-unit">${unit}</span></span>
+    ${bandIndicatorHtml(paramId, rawNum)}
+  </div>`;
+}
+
+/**
+ * Radiation cumulative dose card — progress bar toward advisory (50 mSv) and
+ * warning (150 mSv) anchors (VD-R10: "approach to limit" spatial encoding).
+ */
+function radiationHabCard(value, unit, rawNum) {
+  const cls = paramClass('radiation_cumulative_msv', rawNum);
+  const sev = paramSeverity('radiation_cumulative_msv', rawNum);
+  const badge = sev ? `<span class="hab-severity-badge ${sev}">${sev.toUpperCase()}</span>` : '';
+  const pctFill    = Math.min(rawNum / 150 * 100, 100).toFixed(1);
+  const advisory50 = (50 / 150 * 100).toFixed(1);
+  const barColor   = sev === 'warning'  ? 'var(--emergency)'
+                   : sev === 'caution'  ? 'var(--caution)'
+                   : 'var(--success)';
+  return `<div class="hab-card hab-card-radiation${sev ? ' hab-' + sev : ''}">
+    <div class="hab-card-top"><span class="hab-label">CUMUL. DOSE</span>${badge}</div>
+    <span class="hab-value ${cls}">${value}<span class="hab-unit">${unit}</span></span>
+    <div class="hab-rad-bar-wrap">
+      <div class="hab-rad-bar" style="width:${pctFill}%;background:${barColor}"></div>
+      <div class="hab-rad-marker" style="left:${advisory50}%" title="ADVISORY 50 mSv"></div>
+    </div>
+    <div class="hab-rad-anchors">
+      <span class="hab-rad-anchor advisory">ADV 50</span>
+      <span class="hab-rad-anchor warning">WARN 150</span>
+    </div>
+  </div>`;
 }
 
 // ── Device status bar (in detail modal header) ────────
@@ -658,7 +1236,7 @@ function renderDeviceStatusBar(devices) {
     const st  = devices[key].status;
     const sig = st.signal || (st.connected ? "ok" : "stale");
     const batt = st.battery_pct != null
-      ? `<span class="dev-batt${st.battery_pct < 20 ? " low" : ""}">🔋${st.battery_pct}%</span>`
+      ? `<span class="dev-batt${st.battery_pct < 20 ? " low" : ""}">${st.battery_pct}%</span>`
       : `<span class="dev-batt">wired</span>`;
     return `<div class="dev-chip"><span class="dev-dot ${sig}"></span><span class="dev-name">${meta.icon} ${meta.name}</span>${batt}</div>`;
   }).join("");
@@ -711,8 +1289,9 @@ function toggleScoreDetail(scoreKey) {
   // Sync the scale buttons to current scale
   syncScaleButtons();
 
-  renderScoreChart(scoreKey, lastDetailData?.wearable[scoreKey] ?? 70, meta.color, currentScale);
-  renderSensorSubset(meta, lastDetailData?.devices);
+  const scoreValue = lastDetailData?.wearable[scoreKey] ?? 70;
+  renderScoreChart(scoreKey, scoreValue, meta.color, currentScale);
+  renderSensorSubset(meta, lastDetailData?.devices, scoreKey, scoreValue, lastDetailData?.cognitive_risk);
   renderScoreReportPanel(scoreKey, lastDetailData?.wearable, lastDetailData?.devices, lastDetailData?.mission_day);
 
   el("score-detail-panel").classList.remove("hidden");
@@ -821,6 +1400,31 @@ function renderScoreChart(scoreKey, currentValue, color, scale = currentScale) {
   grad.addColorStop(0,   color + "33");
   grad.addColorStop(1,   color + "05");
 
+  // Threshold floor reference lines for scores with defined minimums (VD-R10)
+  const thresholdDatasets = [];
+  if (scoreKey === 'fatigue_score' || scoreKey === 'sleep_score') {
+    thresholdDatasets.push({
+      label:       'Caution floor (70)',
+      data:        Array(cfg.N).fill(70),
+      borderColor: '#d29922',
+      borderDash:  [5, 4],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill:        false,
+      tension:     0,
+    });
+    thresholdDatasets.push({
+      label:       'Warning floor (60)',
+      data:        Array(cfg.N).fill(60),
+      borderColor: '#f85149',
+      borderDash:  [5, 4],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill:        false,
+      tension:     0,
+    });
+  }
+
   scoreChartInstance = new Chart(ctx, {
     type: "line",
     data: {
@@ -835,14 +1439,18 @@ function renderScoreChart(scoreKey, currentValue, color, scale = currentScale) {
         pointRadius:     cfg.pointRadius,
         pointBackgroundColor: color,
         pointHoverRadius: cfg.pointRadius + 2,
-      }],
+      }, ...thresholdDatasets],
     },
     options: {
       responsive:          true,
       maintainAspectRatio: false,
       interaction:         { mode: "index", intersect: false },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: thresholdDatasets.length > 0,
+          position: 'bottom',
+          labels: { color: '#8b949e', boxWidth: 18, font: { size: 10 } },
+        },
         tooltip: {
           callbacks: {
             label: (ctx) => ` ${ctx.parsed.y} / 100`,
@@ -867,17 +1475,52 @@ function renderScoreChart(scoreKey, currentValue, color, scale = currentScale) {
   });
 }
 
+// ── Score advice block ────────────────────────────────
+function renderScoreAdviceBlock(scoreKey, scoreValue, cognitiveRisk) {
+  const advice = SCORE_ADVICE[scoreKey];
+  let tier = null;
+  let text = null;
+  if (advice) {
+    if (scoreValue < 60) { tier = "warning"; text = advice.warning; }
+    else if (scoreValue < 70) { tier = "caution"; text = advice.caution; }
+  }
+
+  const isCogScore = scoreKey === "fatigue_score" || scoreKey === "sleep_score";
+  const crTier = cognitiveRisk?.tier;
+
+  if (!tier && !(isCogScore && crTier)) return "";
+
+  const blocks = [];
+  if (tier && text) {
+    blocks.push(`<div class="score-advice-block score-advice-block--${tier}">
+      <span class="score-advice-label">${tier === "warning" ? "Warning" : "Caution"}</span>
+      <p class="score-advice-text">${text}</p>
+    </div>`);
+  }
+  if (isCogScore && crTier) {
+    blocks.push(`<div class="score-advice-block score-advice-block--${crTier}">
+      <span class="score-advice-label">Cognitive Performance Risk</span>
+      <p class="score-advice-text">Multiple performance-affecting factors are elevated simultaneously. Judgment and reaction time may be impaired. Address the most tractable contributing factor (CO₂ or SpO₂) first, then prioritise sleep.</p>
+    </div>`);
+  }
+  return blocks.join("");
+}
+
 // ── Relevant sensor subset ────────────────────────────
-function renderSensorSubset(meta, devices) {
+function renderSensorSubset(meta, devices, scoreKey, scoreValue, cognitiveRisk) {
   if (!devices) return;
-  el("sdp-sensors").innerHTML = meta.sensors.map(({ device, icon, name, fields }) => {
+  const adviceHtml = renderScoreAdviceBlock(scoreKey, scoreValue, cognitiveRisk);
+  const sensorsHtml = meta.sensors.map(({ device, icon, name, fields }) => {
     const d = devices[device];
     if (!d) return "";
     const rows = fields.map(({ label, get, param, num }) => {
-      const cls = (param && num) ? paramClass(param, num(d)) : '';
-      return `<div class="sdp-row">
+      const rawV = (param && num) ? num(d) : null;
+      const cls  = (rawV != null && param) ? paramClass(param, rawV) : '';
+      const bar  = (rawV != null && param && PARAM_RANGES[param]) ? sensorMiniBar(param, rawV) : '';
+      return `<div class="sdp-row${bar ? ' has-bar' : ''}">
         <span class="sdp-row-label">${label}</span>
         <span class="sdp-row-value ${cls}">${get(d)}</span>
+        ${bar}
       </div>`;
     }).join("");
     return `<div class="sdp-device-block">
@@ -885,6 +1528,7 @@ function renderSensorSubset(meta, devices) {
       <div class="sdp-device-rows">${rows}</div>
     </div>`;
   }).join("");
+  el("sdp-sensors").innerHTML = adviceHtml + sensorsHtml;
 }
 
 // ── Environmental (detail modal) ──────────────────────
@@ -907,52 +1551,441 @@ function vitalCard(label, value, unit, paramId, rawNum) {
 }
 
 // ── Alerts (detail modal) ─────────────────────────────
+// ══════════════════════════════════════════════════════
+// Alert trend charts
+// ══════════════════════════════════════════════════════
+
+/** Format a negative-minute offset as "−2h 30m" / "−6h" / "Now". */
+function fmtMin(min) {
+  if (min === 0) return 'Now';
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m === 0 ? `−${h}h` : `−${h}h ${m}m`;
+}
+
+/** Generate a plausible 24-point time series centred on `center` with noise `jitter`. */
+function mockParamSeries(center, n = 24, jitter = 1) {
+  const out = [];
+  let v = center;
+  for (let i = 0; i < n; i++) {
+    v += (Math.random() - 0.5) * jitter * 2;
+    v  = v * 0.85 + center * 0.15;           // mean-revert toward center
+    out.push(parseFloat(v.toFixed(2)));
+  }
+  out[n - 1] = center;                        // last point is current reading
+  return out;
+}
+
+/** Time labels for a 24-point mock hourly series: "−23h" … "Now". */
+function mockHourLabels(n = 24) {
+  return Array.from({ length: n }, (_, i) => {
+    const h = n - 1 - i;
+    return h === 0 ? 'Now' : `−${h}h`;
+  });
+}
+
+/** Monotonically increasing cumulative series ending at `current`. */
+function mockCumulativeSeries(current, n = 24, dailyRate = 1.1) {
+  const hourlyRate = dailyRate / 24;
+  return Array.from({ length: n }, (_, i) => {
+    const offset = (n - 1 - i) * hourlyRate;
+    return parseFloat((current - offset + (Math.random() - 0.5) * 0.1).toFixed(1));
+  });
+}
+
+/**
+ * Maps alert `parameter` strings (from the backend AlertItem) to chart config.
+ * `getSeries(d)` and `getLabels(d)` receive `lastDetailData`.
+ * `thresholds` are rendered as dashed horizontal reference lines.
+ */
+const ALERT_TREND_MAP = {
+  'SpO₂': {
+    label: 'SpO₂',       unit: '%',     color: '#79c0ff',
+    getSeries: d => d.vitals_series.map(s => s.spo2_pct),
+    getLabels:  d => d.vitals_series.map(s => fmtMin(s.t_offset_min)),
+    thresholds: [
+      { value: 94, label: 'Caution < 94%',  color: '#d29922' },
+      { value: 92, label: 'Warning < 92%',  color: '#f85149' },
+    ],
+  },
+  'Heart rate': {
+    label: 'Heart Rate',  unit: 'bpm',   color: '#f0883e',
+    getSeries: d => d.vitals_series.map(s => s.heart_rate_bpm),
+    getLabels:  d => d.vitals_series.map(s => fmtMin(s.t_offset_min)),
+    thresholds: [
+      { value: 45,  label: 'Caution < 45 bpm',   color: '#d29922' },
+      { value: 40,  label: 'Warning < 40 bpm',   color: '#f85149' },
+      { value: 120, label: 'Caution > 120 bpm',  color: '#d29922' },
+      { value: 130, label: 'Warning > 130 bpm',  color: '#f85149' },
+    ],
+  },
+  'Respiratory rate': {
+    label: 'Respiratory Rate', unit: 'br/min', color: '#56d364',
+    getSeries: d => d.vitals_series.map(s => s.respiratory_rate_bpm),
+    getLabels:  d => d.vitals_series.map(s => fmtMin(s.t_offset_min)),
+    thresholds: [
+      { value: 10, label: 'Caution < 10 br/min', color: '#d29922' },
+      { value: 8,  label: 'Warning < 8 br/min',  color: '#f85149' },
+      { value: 20, label: 'Caution > 20 br/min', color: '#d29922' },
+      { value: 24, label: 'Warning > 24 br/min', color: '#f85149' },
+    ],
+  },
+  'Systolic BP': {
+    label: 'Systolic Blood Pressure', unit: 'mmHg', color: '#db6d28',
+    getSeries: d => mockParamSeries(d.wearable.systolic_mmhg, 24, 5),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [
+      { value: 90,  label: 'Caution < 90 mmHg',  color: '#d29922' },
+      { value: 80,  label: 'Warning < 80 mmHg',  color: '#f85149' },
+      { value: 160, label: 'Caution > 160 mmHg', color: '#d29922' },
+      { value: 170, label: 'Warning > 170 mmHg', color: '#f85149' },
+    ],
+  },
+  'Cabin CO₂': {
+    label: 'Cabin CO₂',  unit: 'mmHg', color: '#d29922',
+    getSeries: d => mockParamSeries(d.environmental.cabin_co2_mmhg, 24, 0.3),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [
+      { value: 6, label: 'Caution > 6 mmHg', color: '#d29922' },
+      { value: 8, label: 'Warning > 8 mmHg',  color: '#f85149' },
+    ],
+  },
+  'Cumulative dose': {
+    label: 'Cumulative Radiation Dose', unit: 'mSv', color: '#bc8cff',
+    getSeries: d => mockCumulativeSeries(d.environmental.mission_cumulative_dose_msv, 24, 1.1),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [
+      { value: 50,  label: 'Caution > 50 mSv',  color: '#d29922' },
+      { value: 150, label: 'Warning > 150 mSv', color: '#f85149' },
+    ],
+  },
+  'Cabin temperature': {
+    label: 'Cabin Temperature', unit: '°C', color: '#58a6ff',
+    getSeries: d => mockParamSeries(d.environmental.cabin_temp_c, 24, 0.4),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [
+      { value: 19, label: 'Caution < 19 °C',  color: '#d29922' },
+      { value: 18, label: 'Warning < 18 °C',  color: '#f85149' },
+      { value: 26, label: 'Caution > 26 °C',  color: '#d29922' },
+      { value: 27, label: 'Warning > 27 °C',  color: '#f85149' },
+    ],
+  },
+  // Integrity alerts — map to underlying signal trends
+  'Heart rate channel':    null,   // handled via aliasing below
+  'SpO₂ channel':          null,
+  'Environmental fusion':  null,
+};
+// Integrity alert aliases → same chart as the raw parameter
+ALERT_TREND_MAP['Heart rate channel']   = ALERT_TREND_MAP['Heart rate'];
+ALERT_TREND_MAP['SpO₂ channel']         = ALERT_TREND_MAP['SpO₂'];
+ALERT_TREND_MAP['Environmental fusion'] = ALERT_TREND_MAP['Cabin CO₂'];
+
+// ── Alert trend chart state ───────────────────────────
+let selectedAlertId    = null;
+let alertTrendChart    = null;
+
+function destroyAlertTrendChart() {
+  if (alertTrendChart) { alertTrendChart.destroy(); alertTrendChart = null; }
+}
+
+function closeAlertTrend() {
+  destroyAlertTrendChart();
+  const pool = el("alert-chart-pool");
+  const canvas = el("alert-trend-chart");
+  if (canvas && pool && canvas.parentNode !== pool) {
+    pool.appendChild(canvas);
+  }
+  document.querySelectorAll(".alert-item").forEach((li) => {
+    li.classList.remove("selected");
+    const ex = li.querySelector(".alert-expand");
+    const compact = li.querySelector(".alert-compact");
+    if (ex) {
+      ex.classList.add("hidden");
+      ex.setAttribute("aria-hidden", "true");
+    }
+    if (compact) compact.setAttribute("aria-expanded", "false");
+  });
+  selectedAlertId = null;
+}
+
+function updateAlertCompactAria(li, expanded) {
+  const c = li.querySelector(".alert-compact");
+  if (c) c.setAttribute("aria-expanded", expanded ? "true" : "false");
+}
+
+function buildAlertTrendChart(parameter, li) {
+  const cfg = ALERT_TREND_MAP[parameter];
+  if (!cfg || !lastDetailData) return;
+
+  const series = cfg.getSeries(lastDetailData);
+  const current = series[series.length - 1];
+  const paramEl = li.querySelector(".alert-expand-param");
+  const curEl = li.querySelector(".alert-expand-current");
+  const slot = li.querySelector(".alert-chart-slot");
+  if (paramEl) paramEl.textContent = cfg.label;
+  if (curEl) curEl.textContent = `Current: ${current} ${cfg.unit}`;
+
+  destroyAlertTrendChart();
+  const canvas = el("alert-trend-chart");
+  if (slot && canvas) {
+    slot.innerHTML = "";
+    slot.appendChild(canvas);
+  }
+
+  const labels = cfg.getLabels(lastDetailData);
+  const n = labels.length;
+  const datasets = [
+    {
+      label: cfg.label,
+      data: series,
+      borderColor: cfg.color,
+      backgroundColor: cfg.color + "22",
+      borderWidth: 2,
+      pointRadius: 0,
+      pointHoverRadius: 4,
+      fill: true,
+      tension: 0.35,
+    },
+    ...(cfg.thresholds || []).map((t) => ({
+      label: t.label,
+      data: Array(n).fill(t.value),
+      borderColor: t.color,
+      borderDash: [5, 4],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: false,
+      tension: 0,
+    })),
+  ];
+
+  const ctx = canvas.getContext("2d");
+  alertTrendChart = new Chart(ctx, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 300 },
+      plugins: {
+        legend: {
+          display: (cfg.thresholds || []).length > 0,
+          position: "bottom",
+          labels: { color: "#8b949e", boxWidth: 18, font: { size: 10 } },
+        },
+        tooltip: {
+          mode: "index",
+          intersect: false,
+          callbacks: {
+            label: (c) => `${c.dataset.label}: ${c.parsed.y} ${cfg.unit}`,
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: {
+            color: "#8b949e",
+            font: { size: 9 },
+            maxTicksLimit: 8,
+            maxRotation: 0,
+          },
+          grid: { color: "#21262d" },
+        },
+        y: {
+          ticks: { color: "#8b949e", font: { size: 10 } },
+          grid: { color: "#21262d" },
+        },
+      },
+    },
+  });
+}
+
+function toggleAlertFromData(a) {
+  const hasTrend = !!(a.parameter && ALERT_TREND_MAP[a.parameter]);
+  const li = document.querySelector(`.alert-item[data-alert-id="${a.id}"]`);
+  const ex = li?.querySelector(".alert-expand");
+  const compact = li?.querySelector(".alert-compact");
+  if (!li || !ex) return;
+
+  const wasOpen = !ex.classList.contains("hidden");
+  if (wasOpen && selectedAlertId === a.id) {
+    closeAlertTrend();
+    return;
+  }
+
+  closeAlertTrend();
+
+  ex.classList.remove("hidden");
+  ex.setAttribute("aria-hidden", "false");
+  li.classList.add("selected");
+  selectedAlertId = a.id;
+  if (compact) compact.setAttribute("aria-expanded", "true");
+
+  if (hasTrend) {
+    buildAlertTrendChart(a.parameter, li);
+  }
+  li.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+// ── Alert field path lookup ───────────────────────────
+function getNestedValue(data, fieldPath) {
+  if (!data || !fieldPath) return undefined;
+  const parts = fieldPath.split(".");
+  const deviceKey = parts[0];
+  const propKey   = parts[1];
+  const devices = lastDetailData?.devices;
+  const env     = lastDetailData?.environmental;
+
+  if (deviceKey === "environmental" && env) {
+    return env[propKey];
+  }
+  if (devices && devices[deviceKey]) {
+    return devices[deviceKey][propKey];
+  }
+  return undefined;
+}
+
+// ── Urgency badge rendering ───────────────────────────
+function urgencyBadgeHtml(urgency) {
+  if (!urgency) return "";
+  let cls = "urgency-badge--monitor";
+  if (urgency.startsWith("Act immediately")) cls = "urgency-badge--act";
+  else if (urgency.startsWith("Notify"))      cls = "urgency-badge--notify";
+  return `<span class="urgency-badge ${cls}">${escapeHtml(urgency)}</span>`;
+}
+
+// ── Related parameter panel ───────────────────────────
+function relatedParamsHtml(relatedParams) {
+  if (!relatedParams || !relatedParams.length) return "";
+  // Filter: always = show, if_alarming = show only when alarming, context = never
+  const visible = relatedParams
+    .filter((p) => {
+      if (p.show_rule === "always")      return true;
+      if (p.show_rule === "if_alarming") return p.currently_alarming === true;
+      return false; // context — hidden
+    })
+    // Sort: always entries first, then if_alarming
+    .sort((a, b) => {
+      const order = { always: 0, if_alarming: 1 };
+      return (order[a.show_rule] ?? 2) - (order[b.show_rule] ?? 2);
+    });
+
+  if (!visible.length) return "";
+
+  const rows = visible.map((p) => {
+    const raw = getNestedValue(lastDetailData, p.field);
+    const valueStr = raw !== undefined && raw !== null ? String(raw) : "—";
+    const alarmCls = p.currently_alarming ? " related-param-row--alarming" : "";
+    return `<div class="related-param-row${alarmCls}">
+      <span class="related-param-field">${escapeHtml(p.field)}</span>
+      <span class="related-param-role">${escapeHtml(p.role)}</span>
+      <span class="related-param-value">${escapeHtml(valueStr)}</span>
+    </div>`;
+  }).join("");
+
+  return `<div class="related-params-panel">
+    <p class="related-params-heading">Related parameters</p>
+    ${rows}
+  </div>`;
+}
+
 function renderAlerts(alerts) {
   const list  = el("detail-alerts-list");
   const empty = el("detail-no-alerts");
   list.innerHTML = "";
+  closeAlertTrend();
   if (!alerts.length) { empty.classList.remove("hidden"); return; }
   empty.classList.add("hidden");
   alerts.forEach((a) => {
+    const hasTrend = !!(a.parameter && ALERT_TREND_MAP[a.parameter]);
     const li = document.createElement("li");
-    li.className = `alert-item ${a.severity}`;
+    li.className = `alert-item ${a.severity} is-interactive`;
+    li.setAttribute("data-alert-id", a.id);
+
+    const displayTitle = a.symptom_title || a.title;
+    const gloss = a.plain_language_gloss
+      ? `<p class="alert-gloss">${escapeHtml(a.plain_language_gloss)}</p>`
+      : "";
+    const urgencyBadge = urgencyBadgeHtml(a.urgency);
+
+    const trendHead = hasTrend
+      ? `<div class="alert-expand-head">
+          <span class="alert-expand-param"></span>
+          <span class="alert-expand-current"></span>
+        </div>`
+      : "";
+
+    const trendChart = hasTrend
+      ? `<div class="alert-expand-chart">
+          <div class="alert-chart-frame">
+            <div class="alert-chart-slot"></div>
+          </div>
+        </div>`
+      : "";
+
+    const relatedPanel = relatedParamsHtml(a.related_params);
+
     li.innerHTML = `
-      <div class="alert-head">
+      <div class="alert-compact" role="button" tabindex="0" aria-expanded="false">
         <span class="severity-tag ${a.severity}">${a.severity}</span>
-        <h3 class="alert-title">${escapeHtml(a.title)}</h3>
+        <div class="alert-compact-body">
+          <h3 class="alert-title">${escapeHtml(displayTitle)}</h3>
+          ${gloss}
+          ${urgencyBadge}
+        </div>
       </div>
-      <p class="alert-body">${escapeHtml(a.message)}</p>
-      <div class="alert-meta">Source: ${escapeHtml(a.source)}
-        ${a.parameter && a.value ? ` · ${escapeHtml(a.parameter)}: ${escapeHtml(a.value)}` : ""}
-        ${a.threshold ? ` (threshold: ${escapeHtml(a.threshold)})` : ""}
+      <div class="alert-expand hidden" aria-hidden="true">
+        <div class="alert-expand-copy">
+          ${trendHead}
+          <p class="alert-body">${escapeHtml(a.message)}</p>
+          <div class="alert-meta">Source: ${escapeHtml(a.source)}
+            ${a.parameter && a.value ? ` · ${escapeHtml(a.parameter)}: ${escapeHtml(a.value)}` : ""}
+            ${a.threshold ? ` (threshold: ${escapeHtml(a.threshold)})` : ""}
+          </div>
+          ${relatedPanel}
+        </div>
+        ${trendChart}
       </div>`;
+
+    const compact = li.querySelector(".alert-compact");
+    compact.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleAlertFromData(a);
+    });
+    compact.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        toggleAlertFromData(a);
+      }
+    });
+
     list.appendChild(li);
   });
 }
 
 // ── Settings sync ─────────────────────────────────────
 async function syncSettings() {
-  const ground   = el("ground-supported").checked;
-  const degraded = el("demo-degraded").checked;
+  const ground    = el("ground-supported").checked;
+  const degraded  = el("demo-degraded").checked;
+  const alertDemo = el("alert-demo").checked;
   await fetch("/api/settings/mode", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ground_supported: ground }),
   });
-  await fetch(`/api/settings/degraded-demo?on=${degraded}`, { method: "POST" });
+  await fetch(`/api/settings/degraded-demo?on=${degraded}`,  { method: "POST" });
+  await fetch(`/api/settings/alert-demo?on=${alertDemo}`,     { method: "POST" });
 }
 
 // ── Overview loader ───────────────────────────────────
 async function loadOverview() {
-  const scenario = el("scenario").value;
   await syncSettings();
-  const r = await fetch(`/api/overview?scenario=${encodeURIComponent(scenario)}`);
+  const r = await fetch("/api/overview");
   if (!r.ok) { console.error("Overview failed:", await r.text()); return; }
   const data = await r.json();
   lastOverview = data;
 
-  el("mission-day").textContent = data.mission_day;
-  renderModeChips(data.mode);
+  renderMissionTransit(data.mission_day);
+  renderMissionMode(data.mode);
   renderCrewBoard(data);
   renderHabitat(data);
   renderOverviewReport(data);
@@ -960,8 +1993,10 @@ async function loadOverview() {
 
 // ── Detail modal ──────────────────────────────────────
 async function openDetail(crewId) {
-  const scenario = el("scenario").value;
-  selectedScore  = null;
+  selectedScore = null;
+  detailCrewId = crewId;
+  detailScenarioKey = scenarioForCrew(crewId);
+  detailLocationKey = locationForCrew(crewId);
 
   // Populate header from cached overview
   const crew = lastOverview?.crew?.find((c) => c.crew_member_id === crewId);
@@ -974,28 +2009,15 @@ async function openDetail(crewId) {
     da.onerror = () => { da.style.display = "none"; };
   }
 
-  // Show panel immediately (scores will populate below)
   el("detail-backdrop").classList.remove("hidden");
   el("detail-panel").classList.remove("hidden");
   document.body.style.overflow = "hidden";
 
-  // Close any open score detail from a previous crew
   el("score-detail-panel").classList.add("hidden");
   destroyScoreChart();
 
   try {
-    const r = await fetch(`/api/crew/${encodeURIComponent(crewId)}/detail?scenario=${encodeURIComponent(scenario)}`);
-    if (!r.ok) throw new Error(await r.text());
-    const data = await r.json();
-    lastDetailData = data;
-
-    renderModeChips(data.mode, "detail-mode-chips");
-    renderDeviceStatusBar(data.devices);
-    renderCrewReport(data);
-    renderScoreCards(data.wearable);
-    renderEnv(data.environmental, data.integrity);
-    renderAlerts(data.alerts);
-    initChat(crewId);
+    await loadCrewDetailData();
     el("detail-close").focus();
   } catch (err) {
     console.error("Detail fetch failed:", err);
@@ -1003,26 +2025,242 @@ async function openDetail(crewId) {
 }
 
 function closeDetail() {
+  closeDetailStatusPopover();
   el("detail-backdrop").classList.add("hidden");
   el("detail-panel").classList.add("hidden");
   document.body.style.overflow = "";
   clearTimeout(surgeonTypingId);
   removeTypingIndicator();
+  el("actions-section").classList.add("hidden");
+  el("actions-list").innerHTML = "";
+  closeAlertTrend();
   destroyScoreChart();
   lastDetailData = null;
   selectedScore  = null;
+  detailCrewId   = null;
+}
+
+// ═══════════════════════════════════════════════════════
+// Welcome screen & Registration page
+// ═══════════════════════════════════════════════════════
+
+const CREW_DEFAULTS = [
+  { id: "CM-1", name: "A. Okada",     role: "Commander"        },
+  { id: "CM-2", name: "M. Reyes",     role: "Flight Engineer"  },
+  { id: "CM-3", name: "J. Park",      role: "Mission Specialist" },
+  { id: "CM-4", name: "S. Lindqvist", role: "Medical Officer"  },
+];
+
+const ROLES = [
+  "Commander",
+  "Flight Engineer",
+  "Mission Specialist",
+  "Medical Officer",
+  "Payload Specialist",
+  "Science Officer",
+];
+
+function showDashboard() {
+  el("welcome-screen").classList.add("hidden");
+  el("registration-page").classList.add("hidden");
+}
+
+function showWelcome() {
+  el("registration-page").classList.add("hidden");
+  el("welcome-screen").classList.remove("hidden");
+}
+
+function showRegistration() {
+  el("welcome-screen").classList.add("hidden");
+  el("registration-page").classList.remove("hidden");
+}
+
+// ── Build registration crew cards (pre-populate from saved data) ──
+async function buildRegGrid() {
+  // Fetch any previously saved roster
+  let savedById = {};
+  try {
+    const r = await fetch("/api/crew-roster");
+    if (r.ok) {
+      const data = await r.json();
+      (data.crew || []).forEach((m) => { savedById[m.id] = m; });
+    }
+  } catch (e) {
+    console.warn("Could not load saved roster:", e);
+  }
+
+  const grid = el("reg-grid");
+  grid.innerHTML = "";
+
+  CREW_DEFAULTS.forEach((crew) => {
+    const saved = savedById[crew.id] || {};
+    const name      = saved.name      || crew.name;
+    const role      = saved.role      || crew.role;
+    const heightVal = saved.height_cm != null ? saved.height_cm : "";
+    const weightVal = saved.weight_kg != null ? saved.weight_kg : "";
+    const photoUrl  = saved.photo_url || null;
+
+    const card = document.createElement("div");
+    card.className = "reg-card";
+    card.innerHTML = `
+      <p class="reg-card-label">${crew.id}</p>
+
+      <!-- Photo upload -->
+      <div class="reg-photo-wrap">
+        <input
+          type="file" accept="image/*"
+          id="photo-${crew.id}"
+          class="reg-photo-input"
+          aria-label="Upload photo for ${name}"
+        />
+        <img
+          id="photo-preview-${crew.id}"
+          class="reg-photo-preview${photoUrl ? " active" : ""}"
+          src="${photoUrl || ""}"
+          alt="Photo of ${name}"
+        />
+        <div class="reg-photo-placeholder" id="photo-ph-${crew.id}"
+             style="${photoUrl ? "display:none" : ""}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z"/>
+            <path stroke-linecap="round" stroke-linejoin="round"
+              d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z"/>
+          </svg>
+          <span>Click to upload photo</span>
+        </div>
+      </div>
+
+      <!-- Fields — each input has a stable id for collection at save time -->
+      <div class="reg-fields">
+        <label class="reg-field">
+          <span>Full name *</span>
+          <input id="name-${crew.id}" type="text"
+                 value="${name}" placeholder="Full name" required />
+        </label>
+        <label class="reg-field">
+          <span>Role *</span>
+          <select id="role-${crew.id}">
+            ${ROLES.map((r) =>
+              `<option${r === role ? " selected" : ""}>${r}</option>`
+            ).join("")}
+          </select>
+        </label>
+        <div class="reg-field-row">
+          <label class="reg-field">
+            <span>Height (cm) *</span>
+            <input id="height-${crew.id}" type="number"
+                   min="140" max="220" placeholder="175" value="${heightVal}" />
+          </label>
+          <label class="reg-field">
+            <span>Weight (kg) *</span>
+            <input id="weight-${crew.id}" type="number"
+                   min="40"  max="150" placeholder="70"  value="${weightVal}" />
+          </label>
+        </div>
+      </div>
+    `;
+    grid.appendChild(card);
+
+    // Photo preview — new file selection
+    const fileInput   = card.querySelector(`#photo-${crew.id}`);
+    const preview     = card.querySelector(`#photo-preview-${crew.id}`);
+    const placeholder = card.querySelector(`#photo-ph-${crew.id}`);
+    fileInput.addEventListener("change", () => {
+      const file = fileInput.files[0];
+      if (!file) return;
+      preview.src = URL.createObjectURL(file);
+      preview.classList.add("active");
+      if (placeholder) placeholder.style.display = "none";
+    });
+  });
+}
+
+// ── Save roster then enter the dashboard ──────────────
+async function saveRosterAndEnter() {
+  const btn = el("reg-begin");
+  const origLabel = btn.textContent;
+  btn.textContent = "Saving…";
+  btn.disabled = true;
+
+  try {
+    // Collect text fields
+    const crew = CREW_DEFAULTS.map((def) => ({
+      id:        def.id,
+      name:      el(`name-${def.id}`)?.value?.trim()   || def.name,
+      role:      el(`role-${def.id}`)?.value            || def.role,
+      height_cm: parseInt(el(`height-${def.id}`)?.value) || null,
+      weight_kg: parseInt(el(`weight-${def.id}`)?.value) || null,
+    }));
+
+    // POST text data
+    const r = await fetch("/api/crew-roster", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ crew }),
+    });
+    if (!r.ok) throw new Error(await r.text());
+
+    // Upload any new photos
+    for (const def of CREW_DEFAULTS) {
+      const fileInput = el(`photo-${def.id}`);
+      if (fileInput?.files?.[0]) {
+        const fd = new FormData();
+        fd.append("photo", fileInput.files[0]);
+        await fetch(`/api/crew-roster/${def.id}/photo`, {
+          method: "POST",
+          body: fd,
+        });
+      }
+    }
+
+    showDashboard();
+    loadOverview().catch(console.error);
+  } catch (err) {
+    console.error("Save failed:", err);
+    btn.textContent = "Error — retry";
+    btn.disabled = false;
+    setTimeout(() => {
+      btn.textContent = origLabel;
+      btn.disabled = false;
+    }, 3000);
+  }
 }
 
 // ── Bootstrap ─────────────────────────────────────────
 function init() {
+  // Welcome & registration navigation
+  buildRegGrid().catch(console.error);
+  el("btn-enter-mission").addEventListener("click", () => {
+    showDashboard();
+    loadOverview().catch(console.error);
+  });
+  el("btn-go-register").addEventListener("click", () => {
+    buildRegGrid().catch(console.error);  // refresh in case roster was updated
+    showRegistration();
+  });
+  el("reg-back").addEventListener("click", showWelcome);
+  el("reg-begin").addEventListener("click", saveRosterAndEnter);
+
+  // Developer panel toggle
+  el("dev-toggle").addEventListener("click", () => {
+    const panel = el("dev-panel");
+    panel.classList.toggle("hidden");
+    el("dev-toggle").setAttribute(
+      "aria-expanded",
+      String(!panel.classList.contains("hidden"))
+    );
+  });
+
   el("refresh").addEventListener("click",  () => loadOverview().catch(console.error));
-  el("scenario").addEventListener("change",() => loadOverview().catch(console.error));
   el("ground-supported").addEventListener("change", () => loadOverview().catch(console.error));
   el("demo-degraded").addEventListener("change",    () => loadOverview().catch(console.error));
+  el("alert-demo").addEventListener("change",       () => loadOverview().catch(console.error));
 
   el("detail-close").addEventListener("click", closeDetail);
   el("detail-backdrop").addEventListener("click", closeDetail);
   el("detail-panel").addEventListener("click", (e) => e.stopPropagation());
+  bindDetailStatusPopover();
   el("sdp-close").addEventListener("click", closeScoreDetail);
 
   // Scale toggle buttons (delegated — buttons exist in static HTML)
@@ -1033,14 +2271,19 @@ function init() {
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       if (!el("score-detail-panel").classList.contains("hidden")) { closeScoreDetail(); return; }
-      if (!el("detail-panel").classList.contains("hidden"))       { closeDetail(); }
+      const pop = el("detail-status-popover");
+      if (pop && !pop.classList.contains("hidden")) {
+        closeDetailStatusPopover();
+        return;
+      }
+      if (!el("detail-panel").classList.contains("hidden")) { closeDetail(); }
     }
   });
 
   bindChatEvents();
   tickClock();
   setInterval(tickClock, 1000);
-  loadOverview().catch(console.error);
+  // loadOverview() is called only when the user enters the mission from the welcome screen
 }
 
 document.readyState === "loading"

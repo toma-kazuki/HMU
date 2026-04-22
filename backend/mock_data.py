@@ -30,8 +30,31 @@ CREW_ROSTER: list[dict[str, str]] = [
     {"id": "CM-4", "display_name": "S. Lindqvist", "role": "Medical Officer"},
 ]
 
+# Per-crew activity profile keys for overview mock (nominal | exercise | stress | sleep).
+_SCENARIO_BY_INDEX: tuple[str, ...] = ("nominal", "exercise", "stress", "sleep")
+
+
+def scenario_for_crew_id(crew_member_id: str) -> str:
+    """Deterministic operational scenario per crew member (supports mixed-crew display)."""
+    for i, c in enumerate(CREW_ROSTER):
+        if c["id"] == crew_member_id:
+            return _SCENARIO_BY_INDEX[i % len(_SCENARIO_BY_INDEX)]
+    return "nominal"
+
+
+def location_for_crew_id(crew_member_id: str) -> str:
+    """IVA vs EVA for overview/detail consistency (prototype: one crew on EVA for mixed display)."""
+    for i, c in enumerate(CREW_ROSTER):
+        if c["id"] == crew_member_id:
+            return "eva" if i == 2 else "iva"
+    return "iva"
+
 
 def crew_display_name(crew_member_id: str) -> str:
+    from backend.roster import get_member
+    saved = get_member(crew_member_id)
+    if saved and saved.get("name"):
+        return saved["name"]
     for c in CREW_ROSTER:
         if c["id"] == crew_member_id:
             return c["display_name"]
@@ -39,6 +62,10 @@ def crew_display_name(crew_member_id: str) -> str:
 
 
 def crew_role(crew_member_id: str) -> str:
+    from backend.roster import get_member
+    saved = get_member(crew_member_id)
+    if saved and saved.get("role"):
+        return saved["role"]
     for c in CREW_ROSTER:
         if c["id"] == crew_member_id:
             return c["role"]
@@ -46,15 +73,47 @@ def crew_role(crew_member_id: str) -> str:
 
 
 def avatar_url_for_crew(crew_member_id: str) -> str:
-    """Stable face-style avatar (external CDN; offline fallback in UI)."""
+    """Return uploaded photo if available, else a stable generated avatar."""
+    from backend.roster import get_member
     from urllib.parse import quote
-
+    saved = get_member(crew_member_id)
+    if saved and saved.get("photo_url"):
+        return saved["photo_url"]
     seed = quote(crew_member_id, safe="")
     return f"https://api.dicebear.com/7.x/avataaars/svg?seed={seed}&backgroundColor=b6e3f4,c0aede,d1d4f9,ffd5dc,ffdfbf"
 
 # Demo state toggled via API
 _ground_supported: bool = False
 _demo_degraded: bool = False
+
+# ── Alert demonstration mode ─────────────────────────────────────────────────
+# Enabled at server startup so the dashboard opens showing a live alert scenario.
+#
+# Forced conditions when active
+# ─────────────────────────────
+# CM-2 (M. Reyes — Flight Engineer)  ← physiological event
+#   SpO₂       88.5 %     low_warn < 92 %           → WARNING
+#   Heart rate  128 bpm    high_caution > 120 bpm    → CAUTION  (high_warn threshold = 130)
+#   Systolic BP 168 mmHg   high_caution > 160 mmHg   → CAUTION  (high_warn threshold = 170)
+#   RR          7.0 br/min low_warn < 8 br/min       → WARNING
+#
+# Habitat environment               ← shared across all crew
+#   Cabin CO₂   7.5 mmHg   high_caution > 6 mmHg    → CAUTION  (high_warn threshold = 8)
+#   Cumul. dose 158.0 mSv  high_warn > 150 mSv       → WARNING
+#
+# Together these drive mission mode → ALERT and demonstrate the full pipeline.
+# Toggle via POST /api/settings/alert-demo or the "Alert Demo" checkbox in the UI.
+_alert_demo: bool = True
+_ALERT_DEMO_CREW = "CM-2"
+
+
+def set_alert_demo(on: bool) -> None:
+    global _alert_demo
+    _alert_demo = on
+
+
+def is_alert_demo() -> bool:
+    return _alert_demo
 
 
 def set_ground_supported(on: bool) -> None:
@@ -122,6 +181,13 @@ def build_wearable(
     link = 94.0 + rng.uniform(-6, 5)
     sync_sec = rng.randint(12, 95)
 
+    # ── Alert demo overrides (forced out-of-range for demonstration) ──────────
+    if _alert_demo and crew_member_id == _ALERT_DEMO_CREW:
+        spo2      = 88.5   # < 92  → WARNING:  Low blood oxygen saturation
+        hr        = 128.0  # > 120 → CAUTION:  Sustained elevated heart rate (warn threshold: 130)
+        sys_bp    = 168.0  # > 160 → CAUTION:  Systolic pressure deviation   (warn threshold: 170)
+        rr        = 7.0    # < 8   → WARNING:  Respiratory rate outside range
+
     return WearableSnapshot(
         heart_rate_bpm=round(hr, 1),
         spo2_pct=round(spo2, 1),
@@ -184,6 +250,11 @@ def build_devices(
     # not by scenario (it reflects the prior rest period, not current activity).
     rhr_base = random.Random(hash(crew_member_id + "rhr") % (2**32)).uniform(52, 68)
     rhr = round(rhr_base + rng.uniform(-3, 4) + (3.5 if stressed else 0), 1)
+
+    # When alert demo is active for this crew member, reflect the emergency
+    # ECG rhythm that matches the forced tachycardia reading.
+    if _alert_demo and crew_member_id == _ALERT_DEMO_CREW:
+        ecg_map[scenario] = "Sinus tachycardia"
 
     bio = BioMonitorData(
         status=_dev_status(78),
@@ -288,6 +359,12 @@ def build_environmental(mission_day: int) -> EnvironmentalSnapshot:
     temp = 22.5 + rng.uniform(-1.5, 2.5)
     humidity = 55.0 + rng.uniform(-8, 10)
     dose = 12.0 + mission_day * 1.1 + rng.uniform(0, 6)
+
+    # ── Alert demo overrides ──────────────────────────────────────────────────
+    if _alert_demo:
+        co2  = 7.5    # > 6.0 → CAUTION: Elevated cabin CO₂ (warn threshold: 8 mmHg)
+        dose = 158.0  # > 150 → WARNING: Mission cumulative radiation
+
     return EnvironmentalSnapshot(
         cabin_co2_mmhg=round(max(2.0, co2), 2),
         cabin_temp_c=round(temp, 1),

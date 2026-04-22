@@ -1,0 +1,36 @@
+{
+  "crew": [
+    {
+      "id": "CM-1",
+      "name": "A. Okada",
+      "role": "Commander",
+      "height_cm": null,
+      "weight_kg": null,
+      "photo_url": "/data/photos/CM-1.webp"
+    },
+    {
+      "id": "CM-2",
+      "name": "M. Reyes",
+      "role": "Flight Engineer",
+      "height_cm": null,
+      "weight_kg": null,
+      "photo_url": "/data/photos/CM-2.webp"
+    },
+    {
+      "id": "CM-3",
+      "name": "J. Park",
+      "role": "Mission Specialist",
+      "height_cm": null,
+      "weight_kg": null,
+      "photo_url": "/data/photos/CM-3.webp"
+    },
+    {
+      "id": "CM-4",
+      "name": "S. Lindqvist",
+      "role": "Medical Officer",
+      "height_cm": null,
+      "weight_kg": null,
+      "photo_url": "/data/photos/CM-4.webp"
+    }
+  ]
+}

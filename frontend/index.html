@@ -4,9 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>HMU — Crew Health Dashboard</title>
-  <link rel="stylesheet" href="/assets/styles.css?v=11" />
+  <link rel="stylesheet" href="/assets/styles.css?v=37" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js" defer></script>
-  <script src="/assets/app.js?v=11" defer></script>
+  <script src="/assets/app.js?v=37" defer></script>
 </head>
 <body>
   <div class="app">
@@ -21,9 +21,40 @@
         </div>
       </div>
       <div class="top-bar-right">
-        <div class="meta-block">
-          <span class="meta-label">Mission day</span>
-          <span id="mission-day" class="meta-value">—</span>
+        <div class="meta-block meta-block--mode">
+          <span class="meta-label">Mode</span>
+          <span id="mode-value" class="mode-display mode-display--nominal" role="status" aria-live="polite">—</span>
+        </div>
+        <div class="meta-block meta-block--mission">
+          <span class="meta-label">Mission timeline</span>
+          <div id="mission-transit" class="mission-transit">
+            <div class="mission-transit-head">
+              <span id="mission-phase-title" class="meta-value">—</span>
+              <span id="mission-day-badge" class="meta-value mono" aria-label="Mission day">—</span>
+            </div>
+            <div
+              id="mission-track"
+              class="mission-track"
+              role="img"
+              aria-label="Transit progress along Earth to Mars corridor"
+            >
+              <div class="mission-track-row">
+                <div class="mission-body mission-body--earth">
+                  <span class="mission-body-dot" aria-hidden="true"></span>
+                  <span class="mission-body-name">Earth</span>
+                </div>
+                <div class="mission-track-inner">
+                  <div class="mission-track-bg" aria-hidden="true"></div>
+                  <div id="mission-track-fill" class="mission-track-fill" aria-hidden="true"></div>
+                  <div id="mission-track-pin" class="mission-track-pin" aria-hidden="true"></div>
+                </div>
+                <div class="mission-body mission-body--mars">
+                  <span class="mission-body-dot" aria-hidden="true"></span>
+                  <span class="mission-body-name">Mars</span>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
         <div class="meta-block">
           <span class="meta-label">Date</span>
@@ -33,30 +64,36 @@
           <span class="meta-label">Time (UTC)</span>
           <span id="clock" class="meta-value mono">—</span>
         </div>
+        <button type="button" id="dev-toggle" class="btn-dev"
+                aria-expanded="false" aria-controls="dev-panel">
+          ⚙ Developer
+        </button>
       </div>
     </header>
 
-    <!-- ── Mode & controls ───────────────────────── -->
-    <div class="controls-row">
-      <div class="mode-bar" aria-label="Mission mode">
-        <span class="mode-bar-label">Mode</span>
-        <div id="mode-chips" class="mode-chips"></div>
-      </div>
-      <div class="controls-right">
-        <label class="field">
-          <span>Scenario</span>
-          <select id="scenario">
-            <option value="nominal">Nominal monitoring</option>
-            <option value="exercise">Exercise</option>
-            <option value="stress">Elevated stress / workload</option>
-            <option value="sleep">Sleep period</option>
-          </select>
-        </label>
+    <!-- ── Developer panel (hidden by default) ───── -->
+    <div id="dev-panel" class="dev-panel hidden" aria-label="Developer controls">
+      <p class="dev-panel-label">Developer — testing controls (not visible to crew)</p>
+      <div class="dev-panel-inner">
         <label class="toggle"><input type="checkbox" id="ground-supported" /><span>Ground-supported</span></label>
         <label class="toggle"><input type="checkbox" id="demo-degraded" /><span>Simulate degradation</span></label>
+        <label class="toggle toggle-alert"><input type="checkbox" id="alert-demo" checked /><span>Alert demo</span></label>
         <button type="button" id="refresh" class="btn-refresh">⟳ Refresh</button>
       </div>
     </div>
+
+    <!-- ── Mission health brief (fleet summary) ────── -->
+    <section class="mission-brief-section" aria-labelledby="mission-brief-heading">
+      <h2 id="mission-brief-heading" class="section-eyebrow">Mission health brief</h2>
+      <div id="overview-report" class="hmu-report hmu-report--mode-nominal" aria-live="polite">
+        <div class="hmu-report-header">
+          <span class="hmu-report-icon">◎</span>
+          <span class="hmu-report-title">HMU Intelligence</span>
+          <span id="overview-report-ts" class="hmu-report-ts"></span>
+        </div>
+        <p id="overview-report-text" class="hmu-report-text">Generating assessment…</p>
+      </div>
+    </section>
 
     <!-- ── Crew columns ───────────────────────────── -->
     <main class="crew-section" aria-label="Crew health overview">
@@ -71,19 +108,6 @@
       <h2 class="section-eyebrow">Habitat</h2>
       <div class="habitat-row" id="habitat-row"></div>
       <p class="habitat-footnote" id="habitat-integrity"></p>
-    </section>
-
-    <!-- ── (1) Mission health brief ──────────────── -->
-    <section class="hmu-report-section" aria-label="Mission health brief">
-      <h2 class="section-eyebrow">Mission health brief</h2>
-      <div id="overview-report" class="hmu-report" aria-live="polite">
-        <div class="hmu-report-header">
-          <span class="hmu-report-icon">◎</span>
-          <span class="hmu-report-title">HMU Intelligence</span>
-          <span id="overview-report-ts" class="hmu-report-ts"></span>
-        </div>
-        <p id="overview-report-text" class="hmu-report-text">Generating assessment…</p>
-      </div>
     </section>
 
     <footer class="bottom-bar">
@@ -106,7 +130,32 @@
         <div>
           <h2 id="detail-title" class="detail-name">—</h2>
           <p id="detail-role" class="detail-role-txt"></p>
-          <div id="detail-mode-chips" class="mode-chips mode-chips-sm" style="margin-top:0.3rem"></div>
+        </div>
+      </div>
+      <div id="detail-header-status-wrap" class="detail-header-status-wrap">
+        <div class="detail-status-inner">
+          <button
+            type="button"
+            id="detail-status-trigger"
+            class="detail-status-trigger detail-activity-trigger"
+            aria-expanded="false"
+            aria-controls="detail-status-popover"
+            aria-haspopup="true"
+          >
+            Rest · IVA
+          </button>
+          <div id="detail-status-popover" class="detail-status-popover hidden" role="region" aria-label="Set activity status">
+            <div id="detail-scenario-group" class="detail-context-seg detail-context-seg--profile" role="group" aria-label="Activity profile">
+              <button type="button" class="detail-scenario-btn activity-profile-chip scenario-nominal" data-scenario="nominal">Rest</button>
+              <button type="button" class="detail-scenario-btn activity-profile-chip scenario-stress" data-scenario="stress">High workload</button>
+              <button type="button" class="detail-scenario-btn activity-profile-chip scenario-exercise" data-scenario="exercise">Exercise</button>
+              <button type="button" class="detail-scenario-btn activity-profile-chip scenario-sleep" data-scenario="sleep">Sleep</button>
+            </div>
+            <div id="detail-location-group" class="detail-context-seg detail-context-seg--location" role="group" aria-label="IVA or EVA">
+              <button type="button" class="detail-location-btn" data-location="iva">IVA</button>
+              <button type="button" class="detail-location-btn" data-location="eva">EVA</button>
+            </div>
+          </div>
         </div>
       </div>
       <!-- Device status chips — compact, next to crew info -->
@@ -116,14 +165,16 @@
 
     <div class="detail-body">
 
-      <!-- (2) Crew health summary report -->
+      <!-- (2) Crew health summary report — GPT-4o symptom description -->
       <div id="crew-report" class="hmu-report hmu-report-crew" aria-live="polite">
         <div class="hmu-report-header">
           <span class="hmu-report-icon">◎</span>
-          <span class="hmu-report-title">HMU Intelligence — Crew Summary</span>
+          <span class="hmu-report-title">HMU Intelligence — Symptom Summary</span>
           <span id="crew-report-ts" class="hmu-report-ts"></span>
         </div>
-        <p id="crew-report-text" class="hmu-report-text">Generating assessment…</p>
+        <p id="crew-report-text" class="hmu-report-text hmu-report-loading">
+          <span class="hmu-spinner"></span>Generating clinical assessment…
+        </p>
       </div>
 
       <!-- 1. Six synthesized score cards — PRIMARY VIEW (always visible) -->
@@ -165,19 +216,27 @@
         </div>
       </section>
 
-      <!-- 3. Habitat environmental — always visible, compact -->
-      <section class="detail-panel-card" aria-label="Habitat environment">
-        <h3 class="detail-block-title">Habitat — environmental</h3>
-        <div class="vital-grid" id="detail-env-grid"></div>
-        <p class="fineprint" id="detail-env-integrity"></p>
-      </section>
-
       <!-- 4. Alerts — always visible -->
       <section class="detail-panel-card" aria-label="Prioritized alerts">
         <h3 class="detail-block-title">Alerts</h3>
-        <p class="alerts-hint">Emergency → Warning → Caution → Advisory</p>
+        <p class="alerts-hint">Emergency → Warning → Caution → Advisory · Click an alert for details (and trend when available)</p>
         <ul id="detail-alerts-list" class="alerts-list"></ul>
         <p id="detail-no-alerts" class="no-alerts hidden">No threshold exceedances — nominal.</p>
+        <div id="alert-chart-pool" class="alert-chart-pool hidden" aria-hidden="true">
+          <canvas id="alert-trend-chart" width="400" height="200"></canvas>
+        </div>
+      </section>
+
+      <!-- 4b. Recommended actions — GPT-4o generated, below alerts -->
+      <section id="actions-section" class="detail-panel-card actions-section hidden" aria-live="polite">
+        <div class="actions-header">
+          <h3 class="detail-block-title" style="margin:0">Recommended Actions</h3>
+          <span class="hmu-report-icon" style="color:var(--accent)">◎ HMU Intelligence</span>
+        </div>
+        <ol id="actions-list" class="actions-list"></ol>
+        <p id="actions-loading" class="actions-loading">
+          <span class="hmu-spinner"></span>Generating recommendations…
+        </p>
       </section>
 
       <!-- 5. Crew communication chat -->
@@ -209,6 +268,69 @@
 
     </div><!-- /.detail-body -->
   </div><!-- /.detail-panel -->
+
+
+  <!-- ══ Welcome screen ═══════════════════════════════ -->
+  <div id="welcome-screen" class="fullpage-overlay">
+    <div class="welcome-content">
+
+      <!-- Logo -->
+      <div class="welcome-logo-wrap" aria-hidden="true">
+        <span class="welcome-logo-ring"></span>
+        <span class="welcome-logo-mark">◎</span>
+      </div>
+
+      <!-- Title & greeting -->
+      <p class="welcome-greeting">Welcome!</p>
+      <h1 class="welcome-title">Health Monitoring Unit</h1>
+      <p class="welcome-desc">
+        Integrated crew health monitoring for long-duration spaceflight missions beyond LEO.
+      </p>
+
+      <!-- Actions -->
+      <div class="welcome-actions">
+        <button id="btn-enter-mission" class="btn-mission-enter">
+          Current Mission <span class="btn-arrow">→</span>
+        </button>
+        <button id="btn-go-register" class="btn-mission-register">
+          + New Mission — Register Crew
+        </button>
+      </div>
+
+      <p class="welcome-legal">Prototype · Not for clinical use</p>
+    </div>
+  </div>
+
+  <!-- ══ Registration page ════════════════════════════ -->
+  <div id="registration-page" class="fullpage-overlay hidden">
+    <div class="reg-inner">
+
+      <!-- Top bar -->
+      <div class="reg-topbar">
+        <button id="reg-back" class="btn-reg-back">← Back</button>
+        <div class="reg-topbar-title">
+          <span class="brand-mark" aria-hidden="true">◎</span>
+          <span>Crew Registration</span>
+        </div>
+        <div></div><!-- grid spacer -->
+      </div>
+
+      <p class="reg-intro">
+        Enter basic health data for each crew member before the mission begins.
+        Fields marked <span class="req-star">*</span> are required.
+      </p>
+
+      <!-- Four crew cards — populated by app.js -->
+      <div class="reg-grid" id="reg-grid"></div>
+
+      <!-- Footer -->
+      <div class="reg-footer">
+        <button id="reg-begin" class="btn-begin-mission">Begin Mission →</button>
+        <p class="reg-disclaimer">Prototype — data is not persisted between sessions</p>
+      </div>
+
+    </div>
+  </div>
 
 </body>
 </html>
