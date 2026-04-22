@@ -31,6 +31,10 @@ class AlertItem(BaseModel):
     parameter: str | None = None
     value: str | None = None
     threshold: str | None = None
+    symptom_title: str | None = None
+    plain_language_gloss: str | None = None
+    urgency: str | None = None
+    related_params: list[dict] | None = None
 
 
 class VitalSample(BaseModel):
@@ -178,12 +182,21 @@ class DashboardPayload(BaseModel):
     crew_member_id: str
     display_name: str = ""
     mission_day: int
+    scenario_assumption: str = Field(
+        default="nominal",
+        description="Activity profile for alerts/thresholds (API key `scenario`): nominal | exercise | stress | sleep.",
+    )
+    location: Literal["iva", "eva"] = Field(
+        default="iva",
+        description="IVA: in habitat air. EVA: suited — habitat CO₂/temp alerts suppressed.",
+    )
     wearable: WearableSnapshot
     devices: WearableDevices
     environmental: EnvironmentalSnapshot
     integrity: SensorIntegrity
     alerts: list[AlertItem]
     vitals_series: list[VitalSample]
+    cognitive_risk: dict | None = None
 
 
 class CrewColumnSummary(BaseModel):
@@ -193,12 +206,23 @@ class CrewColumnSummary(BaseModel):
     display_name: str
     role: str = ""
     avatar_url: str
+    scenario: str = Field(
+        default="nominal",
+        description="Activity profile for mock vitals: nominal | exercise | stress | sleep (per crew).",
+    )
+    location: Literal["iva", "eva"] = Field(
+        default="iva",
+        description="IVA vs EVA for activity status display and alert context (same keys as detail API).",
+    )
     mode: OperationalMode
     health_score: int = Field(ge=0, le=100)
     sleep_score: int = Field(ge=0, le=100)
     fatigue_score: int = Field(ge=0, le=100)
-    stress_score: int = Field(ge=0, le=100)
-    """Mapped from stress_management_score for the overview (higher = better coping)."""
+    stress_score: int = Field(
+        ge=0,
+        le=100,
+        description="Mapped from stress_management_score for the overview (higher = better coping).",
+    )
 
 
 class OverviewPayload(BaseModel):
