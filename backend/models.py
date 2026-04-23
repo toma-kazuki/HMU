@@ -37,35 +37,15 @@ class AlertItem(BaseModel):
     related_params: list[dict] | None = None
 
 
-class VitalSample(BaseModel):
-    t_offset_min: int = Field(description="Minutes before now")
-    heart_rate_bpm: float
-    spo2_pct: float
-    respiratory_rate_bpm: float
-
-
-class WearableSnapshot(BaseModel):
-    heart_rate_bpm: float
-    heart_rate_unit: str = "bpm"
-    spo2_pct: float
-    spo2_unit: str = "%"
-    respiratory_rate_bpm: float
-    respiratory_rate_unit: str = "breaths/min"
-    skin_temp_c: float
-    skin_temp_unit: str = "°C"
-    systolic_mmhg: float
-    diastolic_mmhg: float
-    blood_pressure_unit: str = "mmHg"
-    sleep_score: int = Field(ge=0, le=100)
+class ScoreSnapshot(BaseModel):
     health_score: int = Field(ge=0, le=100)
+    sleep_score: int = Field(ge=0, le=100)
     activity_score: int = Field(ge=0, le=100)
     stress_management_score: int = Field(ge=0, le=100)
     """Higher = better stress coping (workload tolerance)."""
     fatigue_score: int = Field(ge=0, le=100)
     """Fatigue resistance: higher = lower perceived fatigue / better recovery."""
     readiness_score: int = Field(ge=0, le=100)
-    wearable_link_quality_pct: float
-    last_sync_ago_sec: int
 
 
 class EnvironmentalSnapshot(BaseModel):
@@ -190,12 +170,11 @@ class DashboardPayload(BaseModel):
         default="iva",
         description="IVA: in habitat air. EVA: suited — habitat CO₂/temp alerts suppressed.",
     )
-    wearable: WearableSnapshot
+    scores: ScoreSnapshot
     devices: WearableDevices
     environmental: EnvironmentalSnapshot
     integrity: SensorIntegrity
     alerts: list[AlertItem]
-    vitals_series: list[VitalSample]
     cognitive_risk: dict | None = None
 
 
@@ -223,6 +202,8 @@ class CrewColumnSummary(BaseModel):
         le=100,
         description="Mapped from stress_management_score for the overview (higher = better coping).",
     )
+    activity_score: int = Field(ge=0, le=100)
+    readiness_score: int = Field(ge=0, le=100)
 
 
 class OverviewPayload(BaseModel):

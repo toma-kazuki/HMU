@@ -15,7 +15,6 @@ from backend.models import (
     EnvironmentalSnapshot,
     SensorIntegrity,
     WearableDevices,
-    WearableSnapshot,
 )
 
 # ── SYMPTOM_MAP ───────────────────────────────────────────────────────────────
@@ -813,14 +812,13 @@ def _evaluate_cabin_humidity(env, devices) -> "AlertItem | None":
 
 
 def evaluate_alerts(
-    w: WearableSnapshot,
+    devices: WearableDevices,
     env: EnvironmentalSnapshot,
     integrity: SensorIntegrity,
     *,
     is_sleeping: bool = False,
     scenario: str = "nominal",
     location: str = "iva",
-    devices: WearableDevices | None = None,
 ) -> list[AlertItem]:
     """Evaluate all symptoms and return a severity-sorted AlertItem list.
 
@@ -831,20 +829,12 @@ def evaluate_alerts(
     exercising = scenario == "exercise"
     in_habitat = location == "iva"
 
-    if devices:
-        hr     = devices.bio_monitor.heart_rate_bpm
-        rr     = devices.bio_monitor.breathing_rate_bpm
-        spo2   = devices.bio_monitor.spo2_pct
-        sbp    = devices.bio_monitor.systolic_mmhg
-        core_t = devices.thermo_mini.core_body_temp_c
-        pco2   = devices.personal_co2.current_ppm
-    else:
-        hr     = w.heart_rate_bpm
-        rr     = w.respiratory_rate_bpm
-        spo2   = w.spo2_pct
-        sbp    = w.systolic_mmhg
-        core_t = 37.0
-        pco2   = 0.0
+    hr     = devices.bio_monitor.heart_rate_bpm
+    rr     = devices.bio_monitor.breathing_rate_bpm
+    spo2   = devices.bio_monitor.spo2_pct
+    sbp    = devices.bio_monitor.systolic_mmhg
+    core_t = devices.thermo_mini.core_body_temp_c
+    pco2   = devices.personal_co2.current_ppm
 
     co2_mmhg = env.cabin_co2_mmhg
     dose     = env.mission_cumulative_dose_msv

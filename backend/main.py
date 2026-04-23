@@ -71,19 +71,18 @@ def build_dashboard_payload(
     location: Literal["iva", "eva"] = "iva",
 ) -> DashboardPayload:
     mission_day = mock_data.mission_day_only()
-    wearable = mock_data.build_wearable(crew_member_id, mission_day, scenario=scenario)
+    devices = mock_data.build_devices(crew_member_id, mission_day, scenario=scenario)
+    scores = mock_data.build_scores(crew_member_id, mission_day, scenario=scenario)
     environmental = mock_data.build_environmental(mission_day)
-    integrity = mock_data.build_integrity(wearable)
-    devices = mock_data.build_devices(crew_member_id, mission_day, wearable, scenario=scenario)
+    integrity = mock_data.build_integrity(devices)
     is_sleeping = scenario == "sleep"
     alerts = evaluate_alerts(
-        wearable,
+        devices,
         environmental,
         integrity,
         is_sleeping=is_sleeping,
         scenario=scenario,
         location=location,
-        devices=devices,
     )
 
     has_ew = any(
@@ -91,15 +90,9 @@ def build_dashboard_payload(
     )
     mode = mock_data.resolve_mode(has_ew, integrity)
 
-    series = mock_data.vitals_timeseries(
-        wearable.heart_rate_bpm,
-        wearable.spo2_pct,
-        wearable.respiratory_rate_bpm,
-    )
-
     cognitive_risk = evaluate_cognitive_risk(
-        fatigue_score=wearable.fatigue_score,
-        sleep_score=wearable.sleep_score,
+        fatigue_score=scores.fatigue_score,
+        sleep_score=scores.sleep_score,
         spo2_pct=devices.bio_monitor.spo2_pct,
         cabin_co2_mmhg=environmental.cabin_co2_mmhg,
         personal_co2_ppm=devices.personal_co2.current_ppm,
@@ -112,12 +105,11 @@ def build_dashboard_payload(
         mission_day=mission_day,
         scenario_assumption=scenario,
         location=location,
-        wearable=wearable,
+        scores=scores,
         devices=devices,
         environmental=environmental,
         integrity=integrity,
         alerts=alerts,
-        vitals_series=series,
         cognitive_risk=cognitive_risk,
     )
 
@@ -138,18 +130,17 @@ def get_overview():
         cid = c["id"]
         scenario = mock_data.scenario_for_crew_id(cid)
         location = mock_data.location_for_crew_id(cid)
-        w = mock_data.build_wearable(cid, mission_day, scenario=scenario)
-        integrity = mock_data.build_integrity(w)
-        dev = mock_data.build_devices(cid, mission_day, w, scenario=scenario)
+        dev = mock_data.build_devices(cid, mission_day, scenario=scenario)
+        scores = mock_data.build_scores(cid, mission_day, scenario=scenario)
+        integrity = mock_data.build_integrity(dev)
         is_sleeping = scenario == "sleep"
         alerts = evaluate_alerts(
-            w,
+            dev,
             environmental,
             integrity,
             is_sleeping=is_sleeping,
             scenario=scenario,
             location=location,
-            devices=dev,
         )
         has_ew = any(
             a.severity in (AlertSeverity.EMERGENCY, AlertSeverity.WARNING) for a in alerts
@@ -165,10 +156,12 @@ def get_overview():
                 scenario=scenario,
                 location=location,
                 mode=mode,
-                health_score=w.health_score,
-                sleep_score=w.sleep_score,
-                fatigue_score=w.fatigue_score,
-                stress_score=w.stress_management_score,
+                health_score=scores.health_score,
+                sleep_score=scores.sleep_score,
+                fatigue_score=scores.fatigue_score,
+                stress_score=scores.stress_management_score,
+                activity_score=scores.activity_score,
+                readiness_score=scores.readiness_score,
             )
         )
 
@@ -176,10 +169,10 @@ def get_overview():
     if mock_data.is_ground_supported():
         agg = OperationalMode.GROUND_SUPPORTED
 
-    ref = mock_data.build_wearable(
+    ref_dev = mock_data.build_devices(
         "CM-1", mission_day, scenario=mock_data.scenario_for_crew_id("CM-1")
     )
-    ref_integrity = mock_data.build_integrity(ref)
+    ref_integrity = mock_data.build_integrity(ref_dev)
     integ_env = ref_integrity.environmental
 
     return OverviewPayload(

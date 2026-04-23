@@ -15,11 +15,10 @@ from backend.models import (
     OperationalMode,
     OuraRingData,
     PersonalCO2Data,
+    ScoreSnapshot,
     SensorIntegrity,
     ThermoMiniData,
-    VitalSample,
     WearableDevices,
-    WearableSnapshot,
 )
 
 # Four-person crew for desktop overview (display names are fictional placeholders).
@@ -139,82 +138,14 @@ def _wave(seed: float, i: int, period: int = 96) -> float:
     return math.sin(x) * 0.5 + math.sin(2 * x) * 0.15
 
 
-def build_wearable(
-    crew_member_id: str,
-    mission_day: int,
-    *,
-    scenario: str = "nominal",
-) -> WearableSnapshot:
-    """scenario: nominal | exercise | stress | sleep"""
-    rng = random.Random(hash(crew_member_id) % (2**32) + mission_day)
-    base_hr = {"nominal": 72, "exercise": 128, "stress": 112, "sleep": 54}[scenario]
-    hr_jitter = rng.uniform(-4, 4) + _wave(0.3, mission_day * 17 + rng.randint(0, 50)) * 6
-
-    hr = max(38, base_hr + hr_jitter)
-    spo2 = 97 + rng.uniform(-1.2, 0.8)
-    if scenario == "stress":
-        spo2 -= rng.uniform(0, 2)
-    rr = 14 + rng.uniform(-2, 3) + (6 if scenario == "exercise" else 0)
-
-    skin = 33.2 + rng.uniform(-0.4, 0.5)
-    sys_bp = 118 + rng.uniform(-6, 18) + (12 if scenario == "exercise" else 0)
-    dia_bp = 74 + rng.uniform(-5, 8)
-
-    sleep_score = int(max(0, min(100, 78 + rng.randint(-12, 8))))
-    health_score = int(max(0, min(100, 86 + rng.randint(-10, 6))))
-    activity_score = int(max(0, min(100, 71 + rng.randint(-15, 20))))
-    stress_mgmt = int(max(0, min(100, 80 + rng.randint(-18, 5))))
-    readiness = int(max(0, min(100, (sleep_score + health_score + stress_mgmt) / 3)))
-
-    if scenario == "sleep":
-        sleep_score = min(100, sleep_score + 8)
-        readiness = int((sleep_score * 0.4 + health_score * 0.35 + stress_mgmt * 0.25))
-
-    # Fatigue resistance: higher = less fatigue (aligned with sleep + workload proxy).
-    fatigue_load = max(0.0, 100 - readiness + rng.uniform(-8, 12))
-    if scenario == "stress":
-        fatigue_load += 15
-    if scenario == "sleep":
-        fatigue_load = max(0.0, fatigue_load - 20)
-    fatigue_resistance = int(max(0, min(100, 100 - fatigue_load * 0.85)))
-
-    link = 94.0 + rng.uniform(-6, 5)
-    sync_sec = rng.randint(12, 95)
-
-    # ── Alert demo overrides (forced out-of-range for demonstration) ──────────
-    if _alert_demo and crew_member_id == _ALERT_DEMO_CREW:
-        spo2      = 88.5   # < 92  → WARNING:  Low blood oxygen saturation
-        hr        = 128.0  # > 120 → CAUTION:  Sustained elevated heart rate (warn threshold: 130)
-        sys_bp    = 168.0  # > 160 → CAUTION:  Systolic pressure deviation   (warn threshold: 170)
-        rr        = 7.0    # < 8   → WARNING:  Respiratory rate outside range
-
-    return WearableSnapshot(
-        heart_rate_bpm=round(hr, 1),
-        spo2_pct=round(spo2, 1),
-        respiratory_rate_bpm=round(rr, 1),
-        skin_temp_c=round(skin, 2),
-        systolic_mmhg=round(sys_bp, 1),
-        diastolic_mmhg=round(dia_bp, 1),
-        sleep_score=sleep_score,
-        health_score=health_score,
-        activity_score=activity_score,
-        stress_management_score=stress_mgmt,
-        fatigue_score=fatigue_resistance,
-        readiness_score=readiness,
-        wearable_link_quality_pct=round(min(100, max(0, link)), 1),
-        last_sync_ago_sec=sync_sec,
-    )
-
-
 def build_devices(
     crew_member_id: str,
     mission_day: int,
-    wearable: WearableSnapshot,
     *,
     scenario: str = "nominal",
 ) -> WearableDevices:
-    """Generate per-device mock data consistent with the wearable snapshot."""
-    rng = random.Random(hash(crew_member_id + "dev") % (2**32) + mission_day)
+    """Generate all per-device mock data from scratch (no intermediate snapshot)."""
+    rng = random.Random(hash(crew_member_id) % (2**32) + mission_day)
 
     def _dev_status(base_battery: int | None, *, always_on: bool = False) -> DeviceStatus:
         batt: int | None = None
@@ -233,40 +164,61 @@ def build_devices(
     exercising = scenario == "exercise"
     stressed = scenario == "stress"
 
+    # ── Core vitals (shared across bio-monitor fields) ───────────────────────
+    base_hr = {"nominal": 72, "exercise": 128, "stress": 112, "sleep": 54}[scenario]
+    hr_jitter = rng.uniform(-4, 4) + _wave(0.3, mission_day * 17 + rng.randint(0, 50)) * 6
+    hr = max(38, base_hr + hr_jitter)
+
+    spo2 = 97 + rng.uniform(-1.2, 0.8)
+    if stressed:
+        spo2 -= rng.uniform(0, 2)
+
+    rr = 14 + rng.uniform(-2, 3) + (6 if exercising else 0)
+
+    skin = 33.2 + rng.uniform(-0.4, 0.5)
+    sys_bp = 118 + rng.uniform(-6, 18) + (12 if exercising else 0)
+    dia_bp = 74 + rng.uniform(-5, 8)
+
+    # Alert demo overrides — forced out-of-range values for CM-2 demonstration
+    if _alert_demo and crew_member_id == _ALERT_DEMO_CREW:
+        spo2   = 88.5   # < 92  → WARNING
+        hr     = 128.0  # > 120 → CAUTION
+        sys_bp = 168.0  # > 160 → CAUTION
+        rr     = 7.0    # < 8   → WARNING
+
     # ── Bio-Monitor (t-shirt) ────────────────────────
-    hr = wearable.heart_rate_bpm
-    ecg_map = {
+    ecg_rhythm = {
         "nominal": "Normal sinus",
         "sleep": "Normal sinus — sleep",
         "exercise": "Sinus tachycardia",
         "stress": "Sinus tachycardia" if hr > 100 else "Normal sinus",
-    }
+    }[scenario]
+    if _alert_demo and crew_member_id == _ALERT_DEMO_CREW:
+        ecg_rhythm = "Sinus tachycardia"
+
     tidal_vol = 0.5 + rng.uniform(-0.05, 0.1)
     if exercising:
         tidal_vol = 1.8 + rng.uniform(-0.2, 0.4)
+
     mets = {"nominal": 1.4, "sleep": 0.9, "exercise": 7.5, "stress": 2.8}[scenario]
     mets += rng.uniform(-0.2, 0.3)
+
     # Resting HR is a personal physiological baseline — seeded by crew ID,
     # not by scenario (it reflects the prior rest period, not current activity).
     rhr_base = random.Random(hash(crew_member_id + "rhr") % (2**32)).uniform(52, 68)
     rhr = round(rhr_base + rng.uniform(-3, 4) + (3.5 if stressed else 0), 1)
 
-    # When alert demo is active for this crew member, reflect the emergency
-    # ECG rhythm that matches the forced tachycardia reading.
-    if _alert_demo and crew_member_id == _ALERT_DEMO_CREW:
-        ecg_map[scenario] = "Sinus tachycardia"
-
     bio = BioMonitorData(
         status=_dev_status(78),
-        heart_rate_bpm=wearable.heart_rate_bpm,
-        resting_heart_rate_bpm=round(min(rhr, wearable.heart_rate_bpm), 1),
-        ecg_rhythm=ecg_map[scenario],
-        systolic_mmhg=wearable.systolic_mmhg,
-        diastolic_mmhg=wearable.diastolic_mmhg,
-        breathing_rate_bpm=wearable.respiratory_rate_bpm,
+        heart_rate_bpm=round(hr, 1),
+        resting_heart_rate_bpm=round(min(rhr, hr), 1),
+        ecg_rhythm=ecg_rhythm,
+        systolic_mmhg=round(sys_bp, 1),
+        diastolic_mmhg=round(dia_bp, 1),
+        breathing_rate_bpm=round(rr, 1),
         tidal_volume_l=round(tidal_vol, 2),
-        skin_temp_c=wearable.skin_temp_c,
-        spo2_pct=wearable.spo2_pct,
+        skin_temp_c=round(skin, 2),
+        spo2_pct=round(spo2, 1),
         activity_mets=round(mets, 1),
     )
 
@@ -286,8 +238,8 @@ def build_devices(
         sleep_rem_pct=round(rem, 1),
         sleep_light_pct=round(light, 1),
         sleep_awake_pct=round(awake, 1),
-        respiratory_rate_bpm=round(wearable.respiratory_rate_bpm + rng.uniform(-0.5, 0.5), 1),
-        spo2_avg_pct=round(wearable.spo2_pct - rng.uniform(0, 0.5), 1),
+        respiratory_rate_bpm=round(rr + rng.uniform(-0.5, 0.5), 1),
+        spo2_avg_pct=round(spo2 - rng.uniform(0, 0.5), 1),
         steps=rng.randint(0, 300) if sleeping else rng.randint(1200, 9500) if exercising else rng.randint(3000, 7000),
     )
 
@@ -313,7 +265,7 @@ def build_devices(
         else "Moderate" if act_counts < 5000
         else "Vigorous"
     )
-    hyperact = round(min(10, max(0, (wearable.stress_management_score / 100) * rng.uniform(1.5, 5) if stressed else rng.uniform(0.2, 2.0))), 1)
+    hyperact = round(min(10, max(0, rng.uniform(1.5, 5) if stressed else rng.uniform(0.2, 2.0))), 1)
     actiwatch = ActiwatchData(
         status=_dev_status(72),
         activity_counts_per_epoch=act_counts,
@@ -353,6 +305,42 @@ def build_devices(
     )
 
 
+def build_scores(
+    crew_member_id: str,
+    mission_day: int,
+    *,
+    scenario: str = "nominal",
+) -> ScoreSnapshot:
+    """Compute synthesized scores."""
+    rng = random.Random(hash(crew_member_id + "scores") % (2**32) + mission_day)
+
+    sleep_score = int(max(0, min(100, 78 + rng.randint(-12, 8))))
+    health_score = int(max(0, min(100, 86 + rng.randint(-10, 6))))
+    activity_score = int(max(0, min(100, 71 + rng.randint(-15, 20))))
+    stress_mgmt = int(max(0, min(100, 80 + rng.randint(-18, 5))))
+    readiness = int(max(0, min(100, (sleep_score + health_score + stress_mgmt) / 3)))
+
+    if scenario == "sleep":
+        sleep_score = min(100, sleep_score + 8)
+        readiness = int(sleep_score * 0.4 + health_score * 0.35 + stress_mgmt * 0.25)
+
+    fatigue_load = max(0.0, 100 - readiness + rng.uniform(-8, 12))
+    if scenario == "stress":
+        fatigue_load += 15
+    if scenario == "sleep":
+        fatigue_load = max(0.0, fatigue_load - 20)
+    fatigue_resistance = int(max(0, min(100, 100 - fatigue_load * 0.85)))
+
+    return ScoreSnapshot(
+        health_score=health_score,
+        sleep_score=sleep_score,
+        activity_score=activity_score,
+        stress_management_score=stress_mgmt,
+        fatigue_score=fatigue_resistance,
+        readiness_score=readiness,
+    )
+
+
 def build_environmental(mission_day: int) -> EnvironmentalSnapshot:
     rng = random.Random(42 + mission_day)
     co2 = 4.2 + rng.uniform(0, 2.8) + _wave(1.1, mission_day) * 0.6
@@ -374,44 +362,19 @@ def build_environmental(mission_day: int) -> EnvironmentalSnapshot:
 
 
 def build_integrity(
-    wearable: WearableSnapshot,
+    devices: WearableDevices,
     *,
     force_degraded: bool | None = None,
 ) -> SensorIntegrity:
     degraded = _demo_degraded if force_degraded is None else force_degraded
     if degraded:
         return SensorIntegrity(heart_rate="stale", spo2="ok", environmental="stale")
-    if wearable.wearable_link_quality_pct < 70:
+    bio_signal = devices.bio_monitor.status.signal
+    if bio_signal == "lost":
+        return SensorIntegrity(heart_rate="lost", spo2="lost", environmental="ok")
+    if bio_signal == "stale":
         return SensorIntegrity(heart_rate="stale", spo2="stale", environmental="ok")
-    if wearable.last_sync_ago_sec > 180:
-        return SensorIntegrity(heart_rate="stale", spo2="ok", environmental="ok")
     return SensorIntegrity(heart_rate="ok", spo2="ok", environmental="ok")
-
-
-def vitals_timeseries(
-    current_hr: float,
-    current_spo2: float,
-    current_rr: float,
-    points: int = 48,
-    span_min: int = 360,
-) -> list[VitalSample]:
-    step = span_min // max(1, points - 1)
-    out: list[VitalSample] = []
-    for i in range(points):
-        t = span_min - i * step
-        w = 1 - (i / max(1, points - 1))
-        hr = current_hr + _wave(0.7, i) * 8 - w * 3
-        spo2 = current_spo2 + _wave(0.2, i + 3) * 0.8
-        rr = current_rr + _wave(0.9, i + 1) * 2.5
-        out.append(
-            VitalSample(
-                t_offset_min=t,
-                heart_rate_bpm=round(hr, 1),
-                spo2_pct=round(spo2, 1),
-                respiratory_rate_bpm=round(rr, 1),
-            )
-        )
-    return list(reversed(out))
 
 
 def resolve_mode(
