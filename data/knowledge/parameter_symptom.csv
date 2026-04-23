@@ -1,35 +1,35 @@
-parameter,device,Hypoxaemia,Hypercapnia,Tachycardia,Bradycardia,Hypertension,Hypotension,CardiovascularDecompensation,Fever,Hypothermia,Hyperthermia,Tachypnoea,Bradypnoea,RadiationDoseMilestone,CabinTempOutOfRange,CabinHumidityOutOfRange,Health,Sleep,Activity,Fatigue,Stress,Readiness
-heart_rate_bpm,bio_monitor,4,4,T,T,4,4,2,4,4,2,4,4,0,0,0,0,0,0,0,0,0
-resting_heart_rate_bpm,bio_monitor,0,0,3,3,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,1,1
-ecg_rhythm,bio_monitor,0,0,3,3,0,0,3,0,0,0,0,0,0,0,0,1,0,0,0,0,0
-systolic_mmhg,bio_monitor,0,0,4,4,T,T,2,0,0,0,0,0,0,0,0,1,0,0,0,0,0
-diastolic_mmhg,bio_monitor,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,1,0,0,0,0,0
-breathing_rate_bpm,bio_monitor,4,4,0,0,0,0,2,4,0,2,T,T,0,0,0,0,0,0,1,1,0
-tidal_volume_l,bio_monitor,0,5,0,0,0,0,0,0,0,0,5,3,0,0,0,0,0,0,0,1,0
-skin_temp_c,bio_monitor,0,0,0,0,0,0,0,0,5,3,0,0,0,5,0,0,0,0,0,0,0
-spo2_pct,bio_monitor,T,4,4,4,0,4,2,0,0,0,4,2,0,0,0,1,0,0,0,0,1
-activity_mets,bio_monitor,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0
-hrv_ms,oura_ring,0,0,5,5,5,5,5,5,0,0,0,0,0,0,0,1,0,0,1,1,1
-body_temp_deviation_c,oura_ring,0,0,0,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,1,1,0
-sleep_deep_pct,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
-sleep_rem_pct,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
-sleep_light_pct,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
-sleep_awake_pct,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
-respiratory_rate_bpm,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-spo2_avg_pct,oura_ring,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
-steps,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0
-core_body_temp_c,thermo_mini,0,0,4,0,4,4,2,T,T,T,4,4,4,2,4,1,0,0,0,0,1
-activity_counts_per_epoch,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0
-ambient_light_lux,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
-sleep_onset_min,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
-wake_episodes,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0
-activity_level,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0
-hyperactivity_index,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0
-personal_co2_current_ppm,personal_co2,2,2,0,0,0,0,0,0,0,0,2,0,0,2,3,0,0,0,0,1,0
-personal_co2_peak_ppm,personal_co2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-evarm_dose_rate_usv_h,evarm,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0
-evarm_personal_cumulative_msv,evarm,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,1
-cabin_co2_mmhg,environmental,4,T,0,0,4,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0
-cabin_temp_c,environmental,0,0,0,0,0,0,0,0,4,4,0,0,0,T,4,0,0,0,0,0,0
-cabin_humidity_pct,environmental,0,3,0,0,0,0,0,0,5,4,0,0,0,4,T,0,0,0,0,0,0
-mission_cumulative_dose_msv,environmental,0,0,0,0,0,0,0,5,0,0,0,0,T,0,0,0,0,0,0,0,0
+parameter,display_name,device,Hypoxaemia,Hypercapnia,Tachycardia,Bradycardia,Hypertension,Hypotension,CardiovascularDecompensation,Fever,Hypothermia,Hyperthermia,Tachypnoea,Bradypnoea,RadiationDoseMilestone,CabinTempOutOfRange,CabinHumidityOutOfRange,Health,Sleep,Activity,Fatigue,Stress,Readiness
+heart_rate_bpm,Heart rate,bio_monitor,4,4,T,T,4,4,2,4,4,2,4,4,0,0,0,0,0,0,0,0,0
+resting_heart_rate_bpm,Resting heart rate,bio_monitor,0,0,3,3,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1,1,1
+ecg_rhythm,ECG rhythm,bio_monitor,0,0,3,3,0,0,3,0,0,0,0,0,0,0,0,1,0,0,0,0,0
+systolic_mmhg,Systolic BP,bio_monitor,0,0,4,4,T,T,2,0,0,0,0,0,0,0,0,1,0,0,0,0,0
+diastolic_mmhg,Diastolic BP,bio_monitor,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,1,0,0,0,0,0
+breathing_rate_bpm,Breathing rate,bio_monitor,4,4,0,0,0,0,2,4,0,2,T,T,0,0,0,0,0,0,1,1,0
+tidal_volume_l,Tidal volume,bio_monitor,0,5,0,0,0,0,0,0,0,0,5,3,0,0,0,0,0,0,0,1,0
+skin_temp_c,Skin temp,bio_monitor,0,0,0,0,0,0,0,0,5,3,0,0,0,5,0,0,0,0,0,0,0
+spo2_pct,SpO₂,bio_monitor,T,4,4,4,0,4,2,0,0,0,4,2,0,0,0,1,0,0,0,0,1
+activity_mets,Activity (METs),bio_monitor,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0
+hrv_ms,HRV (RMSSD),oura_ring,0,0,5,5,5,5,5,5,0,0,0,0,0,0,0,1,0,0,1,1,1
+body_temp_deviation_c,Temp deviation,oura_ring,0,0,0,0,0,0,0,3,3,3,0,0,0,0,0,0,0,0,1,1,0
+sleep_deep_pct,Sleep deep %,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
+sleep_rem_pct,Sleep REM %,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
+sleep_light_pct,Sleep light %,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
+sleep_awake_pct,Sleep awake %,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
+respiratory_rate_bpm,Respiratory rate,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+spo2_avg_pct,SpO₂ overnight avg,oura_ring,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1
+steps,Steps,oura_ring,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0
+core_body_temp_c,Core body temp,thermo_mini,0,0,4,0,4,4,2,T,T,T,4,4,4,2,4,1,0,0,0,0,1
+activity_counts_per_epoch,Activity counts,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0
+ambient_light_lux,Ambient light,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
+sleep_onset_min,Sleep onset,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0
+wake_episodes,Wake episodes,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,1,0,0
+activity_level,Activity level,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0
+hyperactivity_index,Hyperactivity index,actiwatch,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0
+personal_co2_current_ppm,Personal CO₂,personal_co2,2,2,0,0,0,0,0,0,0,0,2,0,0,2,3,0,0,0,0,1,0
+personal_co2_peak_ppm,Personal CO₂ peak,personal_co2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+evarm_dose_rate_usv_h,Dose rate,evarm,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,0
+evarm_personal_cumulative_msv,Personal dose,evarm,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,0,0,0,0,0,1
+cabin_co2_mmhg,Cabin CO₂,environmental,4,T,0,0,4,0,0,0,0,0,4,0,0,0,0,0,0,0,0,0,0
+cabin_temp_c,Cabin temp,environmental,0,0,0,0,0,0,0,0,4,4,0,0,0,T,4,0,0,0,0,0,0
+cabin_humidity_pct,Cabin humidity,environmental,0,3,0,0,0,0,0,0,5,4,0,0,0,4,T,0,0,0,0,0,0
+mission_cumulative_dose_msv,Mission dose,environmental,0,0,0,0,0,0,0,5,0,0,0,0,T,0,0,0,0,0,0,0,0
