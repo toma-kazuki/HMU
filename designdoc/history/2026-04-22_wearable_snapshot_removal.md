@@ -16,14 +16,16 @@
 | **Scope** | `backend/models.py`, `backend/mock_data.py`, `backend/main.py`, `frontend/app.js` |
 | **Source gaps** | Alert trend chart for Bradypnoea not rendering — root-caused to `ALERT_TREND_MAP['Respiratory rate']` / `AlertItem.parameter = "Breathing rate"` mismatch, itself caused by two parallel data representations |
 | **Design specs** | `5_software_implementation.md §§ Backend, Processing pipeline` |
-| **Implementation commit** | *(pending — not yet committed)* |
+| **Implementation commit** | `02c45d3`, `6c8b0c1` |
 | **Status** | ✅ Complete |
 
 ### Commits that constitute this revision
 
 | Hash | Message summary | Scope |
 | :--- | :--- | :--- |
-| *(pending)* | Remove WearableSnapshot and VitalSample; device-native fields as single source of truth | All four files |
+| `a514493` | docs: consolidate parameter knowledge graph and update design specs | `data/knowledge/`, `designdoc/` |
+| `02c45d3` | refactor(backend): remove WearableSnapshot/VitalSample; device-native data as single source of truth | `backend/models.py`, `backend/mock_data.py`, `backend/main.py`, `backend/alerts.py` |
+| `6c8b0c1` | fix(frontend): rewire ALERT_TREND_MAP and score reads to device-native fields | `frontend/app.js`, `frontend/styles.css` |
 
 ---
 
