@@ -258,6 +258,8 @@ All six scores use a uniform two-tier threshold: **Caution < 70**, **Warning < 6
 
 The table below maps each score to the most clinically relevant conditions that a low score may reflect.
 
+> **Implementation note:** This score-to-condition mapping is **clinical reference knowledge only** — it is not implemented as alert-firing logic in the current software. A low score does not trigger any Symptom alert in the Alerts panel, nor does it programmatically surface a specific condition label in the score detail panel. The mapping is preserved in `data/knowledge/low_indicates.csv` as design knowledge. What *is* implemented is the score advice text (`SCORE_ADVICE` in `frontend/app.js`): when a score falls below Caution (< 70) or Warning (< 60), the score detail panel displays a fixed advisory text per §4.7 — but this text does not reference specific Symptom entries from §5.
+
 | Score | Condition category | Key clinical conditions (low score may indicate) | Primary sensors to cross-check |
 | :--- | :--- | :--- | :--- |
 | **Health Score** | Cardiovascular / thermal / autonomic | Cardiovascular deconditioning, arrhythmia, hypertension, hypoxia, fever, autonomic dysregulation | HR, SpO₂, Systolic BP, Core Body Temp, HRV |
@@ -308,7 +310,7 @@ This section defines the symptom label, trigger logic, parameter relationships, 
 | **If alarming** | Display only when this parameter is also currently in Caution or Warning. |
 | **Context** | Display as informational background; visually de-emphasised. |
 
-> All entries in this section are **[Proposal]** — symptom-level labelling and recommended actions are not yet implemented in the HMU.
+> **Implementation status:** Symptom-level labelling (`symptom_title`, `plain_language_gloss`, `urgency`, `related_params`) and composite Emergency triggers are implemented in `backend/alerts.py` (commit `212858e`). These features were proposed by AI and accepted; entries that were proposed and implemented are marked **[Proposal — implemented]**. The recommended actions text in each §5.X entry is crew-facing guidance embedded in this document; it is not rendered programmatically in the current UI. **[Proposal]** tags without "implemented" mark features not yet implemented in the software.
 
 ---
 
@@ -605,7 +607,7 @@ This section defines the symptom label, trigger logic, parameter relationships, 
 7. Prepare emergency medication kit; await Flight Surgeon guidance for pharmacological intervention.
 8. If no improvement within 10 minutes of initial treatment, escalate to full emergency medical protocol.
 
-> **[Proposal]** This is the highest-priority composite rule to implement. It catches a life-threatening pattern that individual parameter alarms cannot convey on their own.
+> **[Proposal — implemented]** This composite rule was proposed by AI and accepted. It is evaluated in `backend/alerts.py` (`_evaluate_cardiovascular_decompensation()`), commit `212858e`.
 
 ---
 
@@ -835,6 +837,8 @@ This section defines the symptom label, trigger logic, parameter relationships, 
 *Combination A fires when both score dimensions are degraded. Combination B fires when at least one score is degraded and a concurrent physiological or environmental stressor compounds it. A single score below threshold without any other condition does not trigger this alert — the score's own Caution label (in the score detail panel) is sufficient.*
 
 *This composite condition does **not** appear in the Alerts panel — it is score-derived, and score-derived conditions surface exclusively in the score detail panel (see §4.7). When Combination A or B is met, the Fatigue Score and/or Sleep Score cards display the corresponding advice in their detail panels. No Alerts panel entry is generated.*
+
+> **Implementation decision — not implemented:** The trigger logic defined in this section is **design knowledge only** and is not implemented in the current software. The core reason is architectural: this trigger requires Synthesized Scores (`fatigue_score`, `sleep_score`) to act as intermediate parameters feeding into a further trigger calculation. Allowing scores to become inputs to alert logic introduces a second layer of derived computation on top of already-composite values, significantly increasing system complexity and making it harder to trace why an alert fired back to a raw sensor reading. The current software maintains a strict **Parameter → Symptom** relationship — only raw device parameters (from wearable and environmental sensors) serve as trigger inputs. Introducing score-derived triggers would break this invariant. This section is retained as a design reference for future consideration, but should not be implemented without explicit architectural review.
 
 #### Related parameters
 

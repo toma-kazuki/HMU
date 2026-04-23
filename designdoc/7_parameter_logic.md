@@ -9,6 +9,8 @@ This document is the single source of truth for all parameters surfaced in the H
 
 All threshold values are mirrored in `PARAM_LIMITS` in `frontend/app.js`. Visual modality template definitions are in `designdoc/6_visualdesign.md`. Score computation formulas are the mock implementations in `backend/mock_data.py`.
 
+> **Architectural principle — Parameter → Symptom:** Alert trigger logic operates exclusively on raw device parameters (wearable and environmental sensor fields). Synthesized scores and any other derived intermediate values are **never** used as trigger inputs. This keeps the alert pipeline traceable: every alert can be traced back directly to a raw sensor reading without passing through an intermediate computation layer. This principle is maintained system-wide and should not be broken without explicit architectural review. The one exception defined in `8_medical_diagnosis.md §5.10` (Cognitive Performance Risk, which uses score values as trigger inputs) is explicitly **not implemented** for this reason.
+
 ---
 
 ## 1. Display alarm tiers
@@ -327,20 +329,51 @@ Sleep scenario:
 
 ## 5. Alert trend chart coverage
 
-Clicking an active alert opens a time-series trend panel. Coverage by parameter:
+Clicking an active alert opens a time-series trend panel. Every parameter that can appear in an alert detail view (primary trigger or `show_rule = always / if_alarming` in `8_medical_diagnosis.md §5`) must have a chart configuration defined here. Parameters with `show_rule = context` are never shown in the alert detail view and do not need a chart definition.
 
-| Alert parameter label | Data source | Time window | Threshold lines shown |
-| :--- | :--- | :--- | :--- |
-| Heart rate | `vitals_series.heart_rate_bpm` (backend) | 6 h · 48 samples | Caution 45/120 bpm · Warning 40/130 bpm |
-| SpO₂ | `vitals_series.spo2_pct` (backend) | 6 h · 48 samples | Caution 94% · Warning 92% |
-| Respiratory rate | `vitals_series.respiratory_rate_bpm` (backend) | 6 h · 48 samples | Caution 10/20 · Warning 8/24 br/min |
-| Systolic BP | Synthetic series (client) | 24 h mock | Caution 90/160 · Warning 80/170 mmHg |
-| Cabin CO₂ | Synthetic series (client) | 24 h mock | Caution 6 · Warning 8 mmHg |
-| Cumulative dose | Synthetic cumulative (client) | 24 h mock | Caution 50 · Warning 150 mSv |
-| Cabin temperature | Synthetic series (client) | 24 h mock | Caution 19/26 · Warning 18/27 °C |
-| Heart rate channel *(integrity)* | Aliased → Heart rate chart | Same | Same |
-| SpO₂ channel *(integrity)* | Aliased → SpO₂ chart | Same | Same |
-| Environmental fusion *(integrity)* | Aliased → Cabin CO₂ chart | Same | Same |
+Chart configuration specifies: display range (Y-axis min/max), time window, and threshold lines. These values are implemented in `ALERT_TREND_MAP` in `frontend/app.js`.
+
+**Time window convention:**
+- `6 h · 48 samples` — real-time physiological parameters backed by `vitals_series` from the backend
+- `24 h mock` — parameters without a backend time series; client-side synthetic series centred on current value
+
+### 5.1 Physiological parameters
+
+| Parameter | Source field | Unit | Y-axis range | Time window | Threshold lines |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Heart rate | `bio_monitor.heart_rate_bpm` | bpm | 30 – 180 | 6 h · 48 samples | Caution 45 / 120 · Warning 40 / 130 |
+| SpO₂ | `bio_monitor.spo2_pct` | % | 80 – 100 | 6 h · 48 samples | Caution 94 · Warning 92 |
+| Respiratory rate | `bio_monitor.breathing_rate_bpm` | br/min | 4 – 36 | 6 h · 48 samples | Caution 10 / 20 · Warning 8 / 24 |
+| Systolic BP | `bio_monitor.systolic_mmhg` | mmHg | 60 – 200 | 24 h mock | Caution 90 / 160 · Warning 80 / 170 |
+| Diastolic BP | `bio_monitor.diastolic_mmhg` | mmHg | 40 – 130 | 24 h mock | — *(no independent threshold; displayed alongside systolic)* |
+| Resting heart rate | `bio_monitor.resting_heart_rate_bpm` | bpm | 30 – 180 | 24 h mock | — *(shares heart_rate_bpm range; no independent threshold)* |
+| Core body temp | `thermo_mini.core_body_temp_c` | °C | 33.0 – 40.0 | 24 h mock | Caution 36.0 / 37.5 · Warning 35.0 / 38.0 |
+| Body temp deviation | `oura_ring.body_temp_deviation_c` | °C | −2.0 – +2.0 | 24 h mock | — *(no threshold; reference line at 0)* |
+| Personal CO₂ | `personal_co2.current_ppm` | ppm | 0 – 3 500 | 24 h mock | Caution 1 000 · Warning 2 500 |
+
+### 5.2 Environmental parameters
+
+| Parameter | Source field | Unit | Y-axis range | Time window | Threshold lines |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Cabin CO₂ | `environmental.cabin_co2_mmhg` | mmHg | 0 – 12 | 24 h mock | Caution 6 · Warning 8 |
+| Cabin temperature | `environmental.cabin_temp_c` | °C | 14 – 32 | 24 h mock | Caution 19 / 26 · Warning 18 / 27 |
+| Cabin humidity | `environmental.cabin_humidity_pct` | % | 10 – 90 | 24 h mock | Caution 30 / 70 · Warning 25 / 75 |
+| Mission cumul. dose | `environmental.mission_cumulative_dose_msv` | mSv | 0 – 200 | 24 h mock (cumulative) | Caution 50 · Warning 150 |
+
+### 5.3 EVARM parameters
+
+| Parameter | Source field | Unit | Y-axis range | Time window | Threshold lines |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| Dose rate | `evarm.dose_rate_usv_h` | μSv/h | 0 – 500 | 24 h mock | — *(no threshold defined; informational)* |
+| Personal cumul. dose | `evarm.personal_cumulative_msv` | mSv | 0 – 200 | 24 h mock (cumulative) | — *(no threshold defined; shares mission dose range)* |
+
+### 5.4 Integrity alert aliases
+
+| Alert parameter label | Aliased to |
+| :--- | :--- |
+| Heart rate channel *(integrity)* | Heart rate chart |
+| SpO₂ channel *(integrity)* | SpO₂ chart |
+| Environmental fusion *(integrity)* | Cabin CO₂ chart |
 
 ---
 

@@ -127,41 +127,27 @@ Alert severity levels follow the four-tier scheme from `3_requirements.md` (alig
 
 Each `AlertItem` carries: `id`, `severity`, `title`, `message`, `source`, `parameter`, `value`, `threshold`.
 
-#### Alert evaluation paths
+#### Architectural principle — Parameter → Symptom
 
-Alert evaluation in `alerts.py` uses four distinct logic paths. Paths 2–4 are designed extensions; only Path 1 is fully implemented in v0.1.
+Alert trigger logic operates exclusively on **raw device parameters** (wearable and environmental sensor fields). Synthesized scores and any other derived intermediate values are never used as trigger inputs. This keeps every alert directly traceable to a raw sensor reading without passing through an intermediate computation layer. See `7_parameter_logic.md` and `8_medical_diagnosis.md §5.10` for the full rationale.
 
-**Path 1 — Single-parameter threshold (PARAM_LIMITS)**
-Raw sensor field compared against a defined Caution or Warning threshold. Fires a `caution` or `warning` `AlertItem`. Exercise suppression applies here only — high-side Caution for `heart_rate_bpm` (> 120) and `breathing_rate_bpm` (> 20) is skipped when `scenario == "exercise"`. Warning thresholds are never suppressed.
+#### Alert evaluation — `evaluate_alerts()`
 
-**Path 2 — Composite Emergency (multi-parameter pattern)**
-Evaluates combinations of raw fields independently of Path 1. Exercise suppression never applies. Fires a `warning`-class `AlertItem` with the Emergency urgency label. Rules to implement:
+All symptom evaluation is performed inside a single function `evaluate_alerts()` in `alerts.py`. Each symptom has a dedicated `_evaluate_*()` helper that returns 0 or 1 `AlertItem`. The function collects all results and returns a severity-sorted list. There is no distinction between "single-parameter" and "composite" paths at the pipeline level — all helpers receive the same raw parameter values and apply whatever logic is needed (single threshold, multi-parameter AND, or conditional label selection) internally.
 
-| Composite label | Trigger (all conditions must be true simultaneously) |
-| :--- | :--- |
-| Cardiovascular Decompensation (§5.6) | `heart_rate_bpm` > 120 AND `systolic_mmhg` < 90 AND `spo2_pct` < 94 |
-| Hypoxaemia Emergency (§5.1) | `spo2_pct` < 92 AND `heart_rate_bpm` > 130 AND `breathing_rate_bpm` > 20 |
-| Hypotension Emergency (§5.5b) | `systolic_mmhg` < 90 AND `heart_rate_bpm` > 120 AND `spo2_pct` < 94 |
-| Bradycardia Emergency (§5.4) | `heart_rate_bpm` < 40 AND `systolic_mmhg` < 90 |
-| Hypercapnia Emergency (§5.2) | `cabin_co2_mmhg` > 6 AND `personal_co2_ppm` > 1 000 |
+**Trigger logic variants within `_evaluate_*()` helpers:**
 
-Multiple composite alerts can fire simultaneously (e.g. §5.5b and §5.6 share the same three conditions and will both fire). This is intended — each conveys distinct clinical framing.
+| Variant | Example | Description |
+| :--- | :--- | :--- |
+| Single-parameter threshold | `_evaluate_hypoxaemia` | One raw field vs. one Caution/Warning threshold |
+| Multi-parameter AND (Emergency tier) | `_evaluate_cardiovascular_decompensation` | All conditions must be true simultaneously; fires Emergency-class alert |
+| Conditional label selection | `_evaluate_core_temp` | Threshold crossed, then secondary fields determine which symptom label to use (§5.7 Fever vs. §5.8b Hyperthermia) |
 
-**Path 3 — Conditional label selection (§5.7 vs §5.8b)**
-When `core_body_temp_c` exceeds its threshold, the alert label is determined by secondary conditions before firing:
+Exercise suppression (`scenario == "exercise"`) suppresses only the high-side Caution for `heart_rate_bpm` (> 120) and `breathing_rate_bpm` (> 20). Warning thresholds and Emergency-tier composite conditions are never suppressed.
 
-```python
-if core_body_temp_c > threshold:
-    if heart_rate_bpm > 100 or breathing_rate_bpm > 18:
-        label = "Fever — possible infection"     # §5.7
-    else:
-        label = "Hyperthermia (heat stress)"     # §5.8b
-```
+The HR > 100 / RR > 18 disambiguation thresholds inside `_evaluate_core_temp` are sub-Caution values used only for label selection. They are not `PARAM_LIMITS` entries and do not independently trigger alerts.
 
-The HR > 100 / RR > 18 disambiguation thresholds are sub-Caution values used only for label selection. They are not PARAM_LIMITS entries and do not independently trigger alerts.
-
-**Path 4 — Score-based composite (§5.10 — score detail panel only)**
-§5.10 (Cognitive Performance Risk) uses computed score values (`fatigue_score`, `sleep_score`) alongside raw parameters. It does **not** produce an Alerts panel entry. When the composite condition is met, the advice text in the Fatigue Score and Sleep Score detail panels is escalated to Warning-level advisory. Score values must be available in the evaluator after they are computed, as additional inputs separate from the raw-parameter PARAM_LIMITS check. Full trigger conditions are defined in `8_medical_diagnosis.md §5.10`.
+Multiple symptom helpers may fire for the same crew member simultaneously (e.g. Hypotension and Cardiovascular Decompensation share overlapping conditions). This is intended — each conveys distinct clinical framing.
 
 ### Dialogue module (`dialogue.py`)
 
@@ -195,38 +181,28 @@ End-to-end data flow from sensor acquisition to crew display. All sensor input i
                        │
            ┌───────────┴────────────────────┐
            ▼                                ▼
-   Score computation               Alert evaluation — Path 1 & 3
+   Score computation               Alert evaluation
    mock_data.build_wearable()      alerts.evaluate_alerts()
-   6 synthesized scores            Single-parameter thresholds
-           │                       Conditional label: §5.7 vs §5.8b
-           │                                │
-           ▼                                ▼
-   Scores available            Alert evaluation — Path 2
-   as evaluator inputs         Composite Emergency rules
-           │                   §5.6, §5.1E, §5.5bE, §5.4E, §5.2E
-           │                                │
-           ▼                                │
-   Alert evaluation — Path 4               │
-   Score-based composite §5.10             │
-   → score-panel advice flags              │
-   (no AlertItem generated)                │
-           │                               │
-           └──────────────┬────────────────┘
-                          ▼
-                  Mode derivation
-                  mock_data.resolve_mode()
-                          │
-                          ▼
-         DashboardPayload / OverviewPayload
-         (FastAPI JSON response to frontend)
-                          │
-           ┌──────────────┴──────────────────────┐
-           ▼                                      ▼
-   Overview crew board                  Detail modal (per crew)
-   • Crew score cards (4 columns)       • Score cards → score detail panel
-   • Alert severity indicators          • Alerts panel → alert detail view
-   • Mode badge                         • Chat (System AI / Flight Surgeon)
-   • Mission health brief (LLM)
+   6 synthesized scores            One _evaluate_*() per symptom
+                                   Raw parameters only as inputs
+                                   Single / composite / label-select
+                                   variants all in same pipeline
+                                           │
+                                           ▼
+                                   Mode derivation
+                                   mock_data.resolve_mode()
+                                           │
+                                           ▼
+                        DashboardPayload / OverviewPayload
+                        (FastAPI JSON response to frontend)
+                                           │
+                          ┌────────────────┴──────────────────────┐
+                          ▼                                        ▼
+                 Overview crew board                  Detail modal (per crew)
+                 • Crew score cards (4 columns)       • Score cards → score detail panel
+                 • Alert severity indicators          • Alerts panel → alert detail view
+                 • Mode badge                         • Chat (System AI / Flight Surgeon)
+                 • Mission health brief (LLM)
 ```
 
 ### Step 1 — Device data models
@@ -237,7 +213,7 @@ Every field name used in alert trigger tables in `8_medical_diagnosis.md §5` an
 
 ### Step 2 — Score computation
 
-Six synthesized scores (0–100, higher = better) are computed from device fields before alert evaluation. Path 4 (§5.10 Cognitive Performance Risk) requires score values as inputs, so scores must be fully computed before the composite evaluation pass.
+Six synthesized scores (0–100, higher = better) are computed from device fields. Score computation is independent of alert evaluation — scores are not passed into `evaluate_alerts()` and are not used as trigger inputs.
 
 **Computation order (within `mock_data.build_wearable()`):**
 
@@ -251,18 +227,7 @@ All score formulas and alert thresholds (Caution < 70, Warning < 60) are documen
 
 ### Step 3 — Alert evaluation
 
-Four paths run in sequence in `alerts.evaluate_alerts()`. For the complete rule set see the [Alert evaluation paths](#alert-evaluation-paths) subsection above.
-
-**Execution order and data dependencies:**
-
-| Pass | Path | Input | Output |
-| :--- | :--- | :--- | :--- |
-| 1st | Path 3 — Conditional label | `core_body_temp_c`, `heart_rate_bpm`, `breathing_rate_bpm` | Chooses §5.7 or §5.8b label before firing |
-| 1st | Path 1 — Single-parameter | Raw device fields vs. PARAM_LIMITS; exercise suppression applied | `caution` / `warning` AlertItems |
-| 2nd | Path 2 — Composite Emergency | Raw device fields (multi-field AND conditions) | `warning`-class AlertItems with Emergency urgency label |
-| 3rd | Path 4 — Score-based composite | Computed scores + raw device fields (§5.10 conditions) | Score-panel advice flags; no AlertItem |
-
-Exercise suppression (scenario = `exercise`) applies only to Path 1 high-side Caution for `heart_rate_bpm` and `breathing_rate_bpm`. Path 2 composite triggers are never suppressed — see `7_parameter_logic.md §3.1` and `8_medical_diagnosis.md §5.1`.
+`alerts.evaluate_alerts()` receives raw device parameter values only. It calls one `_evaluate_*()` helper per symptom, collects all non-None results, and returns a severity-sorted `AlertItem` list. For the trigger logic variants and exercise suppression rules see the [Alert evaluation](#alert-evaluation-evaluatealerts) subsection above.
 
 ### Step 4 — Mode derivation
 

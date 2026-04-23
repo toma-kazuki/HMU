@@ -16,13 +16,15 @@
 | **Scope** | {Brief scope — which files / subsystems are affected} |
 | **Source gaps** | {Which document or observation identified the gap} |
 | **Design specs** | {Which design docs are the authority for this revision} |
-| **Implementation commit** | *(pending)* |
+| **Baseline commit** | *(fill in before starting implementation)* |
+| **Implementation commit** | *(fill in after implementation is complete)* |
 | **Status** | 🔲 In progress |
 
 ### Commits that constitute this revision
 
 | Hash | Message summary | Scope |
 | :--- | :--- | :--- |
+| *(baseline — pending)* | Baseline snapshot before this revision | — |
 | *(pending)* | {Commit message summary} | {Files affected} |
 
 ---
@@ -62,9 +64,57 @@ Example: `2026-04-22_symptom_alert_system.md`
 
 1. Identify gaps from the current design–implementation gap table in `5_software_implementation.md`.
 2. Create a new file in `designdoc/history/` using this format.
-3. Scope each task for one Coding AI prompt; record prerequisites and test steps.
-4. After implementation, record the git commit hash in the Revision summary table.
-5. Mark tasks complete (✅) and tick success criteria checkboxes (`- [x]`).
+3. **Create a baseline git commit** (see "Git workflow" below) before writing any code.
+4. Scope each task for one Coding AI prompt; record prerequisites and test steps.
+5. After implementation, create an implementation git commit per task (or per logical scope).
+6. Record all git commit hashes in the Revision summary table.
+7. Mark tasks complete (✅) and tick success criteria checkboxes (`- [x]`).
+
+---
+
+## Git workflow
+
+### Before starting implementation
+
+Create a baseline commit that captures the state of the repo before this revision begins.
+This makes it trivial to diff the full revision later.
+
+```bash
+git add -p   # stage only intentional changes; do not use git add -A blindly
+git commit -m "$(cat <<'EOF'
+{Short scope}: baseline before {revision title}
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+```
+
+Record the resulting hash in the **Baseline commit** field above.
+
+### After each task (or logical scope)
+
+If the revision touches multiple independent subsystems, commit each separately.
+If all tasks form one logical unit, a single implementation commit is fine.
+
+**Suggested commit granularity:**
+
+| Condition | Commit strategy |
+| :--- | :--- |
+| One subsystem changed | Single implementation commit after all tasks complete |
+| Multiple independent subsystems | One commit per subsystem (e.g. backend, frontend, docs) |
+| Large refactor with doc updates | Separate commit for doc changes vs. code changes |
+
+```bash
+git add {specific files}
+git commit -m "$(cat <<'EOF'
+{Short description of what changed and why}
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+```
+
+Record each resulting hash in the **Commits that constitute this revision** table above.
 
 ---
 
@@ -72,16 +122,41 @@ Example: `2026-04-22_symptom_alert_system.md`
 
 | # | Task | Scope | Status |
 | :--- | :--- | :--- | :--- |
+| — | Baseline git commit | — | 🔲 Not started |
 | 1 | {Task 1 title} | {Files} | 🔲 Not started |
 | 2 | {Task 2 title} | {Files} | 🔲 Not started |
 | 3 | {Task 3 title} | {Files} | 🔲 Not started |
+| — | Implementation git commit(s) | — | 🔲 Not started |
+
+---
+
+## Baseline git commit
+
+**Status:** 🔲 Not started
+
+Before writing any code, create a commit that records the exact state of the repo
+at the start of this revision. This commit should contain only already-staged or
+in-progress work unrelated to this revision — do not include any implementation
+changes for this revision.
+
+```bash
+git status   # confirm no unintended changes are staged
+git add {any unrelated in-progress files if applicable}
+git commit -m "$(cat <<'EOF'
+snapshot: baseline before {revision title}
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+# Record the hash here: ________________
+```
 
 ---
 
 ## Task 1 — {Task title}
 
 **Status:** 🔲 Not started  
-**Prerequisites:** None
+**Prerequisites:** Baseline commit
 
 ### Objective
 
@@ -206,7 +281,49 @@ done
 
 ---
 
+## Implementation git commit(s)
+
+**Status:** 🔲 Not started  
+**Prerequisites:** All tasks complete and all success criteria passing
+
+Decide on commit granularity (see "Git workflow" section above), then create commits.
+
+```bash
+# Example: single commit for a focused revision
+git add backend/alerts.py frontend/app.js
+git commit -m "$(cat <<'EOF'
+{What changed}: {why / design reference}
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+# Record the hash here: ________________
+
+# Example: separate commits for backend and frontend
+git add backend/
+git commit -m "$(cat <<'EOF'
+backend: {what changed}
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+# Record hash: ________________
+
+git add frontend/
+git commit -m "$(cat <<'EOF'
+frontend: {what changed}
+
+Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+EOF
+)"
+# Record hash: ________________
+```
+
+Update the **Commits that constitute this revision** table and the **Implementation commit** field in the Revision summary with all hashes.
+
+---
+
 *After each task is completed and all success criteria pass, update the Status
 line to **✅ Complete**, tick all checkboxes, and update the Progress overview
-table at the top of this file. Record the implementation commit hash in the
-Revision summary table.*
+table at the top of this file. After all implementation commits are created,
+update the Revision summary table with all commit hashes.*
