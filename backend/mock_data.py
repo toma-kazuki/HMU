@@ -88,21 +88,34 @@ _demo_degraded: bool = False
 # ── Alert demonstration mode ─────────────────────────────────────────────────
 # Enabled at server startup so the dashboard opens showing a live alert scenario.
 #
+# Scenario: Mars → Earth Transit Inbound, day 150/210 (mission day 360)
+# The crew is in the return leg — fatigue and radiation have accumulated.
+#
 # Forced conditions when active
 # ─────────────────────────────
+# Mission timeline
+#   Mission day  360        Transit Return, leg day 150/210
+#
 # CM-2 (M. Reyes — Flight Engineer)  ← physiological event
 #   SpO₂       88.5 %     low_warn < 92 %           → WARNING
 #   Heart rate  128 bpm    high_caution > 120 bpm    → CAUTION  (high_warn threshold = 130)
 #   Systolic BP 168 mmHg   high_caution > 160 mmHg   → CAUTION  (high_warn threshold = 170)
 #   RR          7.0 br/min low_warn < 8 br/min       → WARNING
 #
+# All crew scores (long-duration fatigue)
+#   Fatigue score   ~58     → CAUTION (< 60 → Warning tier)
+#   Sleep score     ~63     → CAUTION (< 70)
+#   Stress mgmt     ~64     → CAUTION (< 70)
+#
 # Habitat environment               ← shared across all crew
 #   Cabin CO₂   7.5 mmHg   high_caution > 6 mmHg    → CAUTION  (high_warn threshold = 8)
+#   Cumul. dose  ~55 mSv   > 50 mSv                  → CAUTION  (high_warn threshold = 150)
 #
 # Together these drive mission mode → ALERT and demonstrate the full pipeline.
 # Toggle via POST /api/settings/alert-demo or the "Alert Demo" checkbox in the UI.
 _alert_demo: bool = True
-_ALERT_DEMO_CREW = "CM-2"
+_ALERT_DEMO_CREW  = "CM-2"
+_ALERT_DEMO_DAY   = 360   # Transit Return leg day 150/210
 
 
 def set_alert_demo(on: bool) -> None:
@@ -330,6 +343,13 @@ def build_scores(
         fatigue_load = max(0.0, fatigue_load - 20)
     fatigue_resistance = int(max(0, min(100, 100 - fatigue_load * 0.85)))
 
+    # Alert demo: long-duration inbound transit — accumulated fatigue across all crew
+    if _alert_demo:
+        sleep_score     = min(sleep_score,  63)
+        stress_mgmt     = min(stress_mgmt,  64)
+        fatigue_resistance = min(fatigue_resistance, 58)
+        readiness       = min(readiness,    62)
+
     return ScoreSnapshot(
         health_score=health_score,
         sleep_score=sleep_score,
@@ -394,15 +414,14 @@ def resolve_mode(
 
 def mission_clock_context() -> tuple[str, int]:
     now = datetime.now(UTC)
-    # Synthetic mission day from epoch for stable demo
-    mission_day = (now.timetuple().tm_yday % 500) + 1
+    mission_day = _ALERT_DEMO_DAY if _alert_demo else (now.timetuple().tm_yday % 500) + 1
     crew = "CM-2"
     return crew, mission_day
 
 
 def mission_day_only() -> int:
     now = datetime.now(UTC)
-    return (now.timetuple().tm_yday % 500) + 1
+    return _ALERT_DEMO_DAY if _alert_demo else (now.timetuple().tm_yday % 500) + 1
 
 
 def aggregate_modes(modes: list[OperationalMode]) -> OperationalMode:
