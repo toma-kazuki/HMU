@@ -98,7 +98,6 @@ _demo_degraded: bool = False
 #
 # Habitat environment               ← shared across all crew
 #   Cabin CO₂   7.5 mmHg   high_caution > 6 mmHg    → CAUTION  (high_warn threshold = 8)
-#   Cumul. dose 158.0 mSv  high_warn > 150 mSv       → WARNING
 #
 # Together these drive mission mode → ALERT and demonstrate the full pipeline.
 # Toggle via POST /api/settings/alert-demo or the "Alert Demo" checkbox in the UI.
@@ -346,12 +345,11 @@ def build_environmental(mission_day: int) -> EnvironmentalSnapshot:
     co2 = 4.2 + rng.uniform(0, 2.8) + _wave(1.1, mission_day) * 0.6
     temp = 22.5 + rng.uniform(-1.5, 2.5)
     humidity = 55.0 + rng.uniform(-8, 10)
-    dose = 12.0 + mission_day * 1.1 + rng.uniform(0, 6)
+    dose = 4.0 + mission_day * 0.28 + rng.uniform(0, 2)
 
     # ── Alert demo overrides ──────────────────────────────────────────────────
     if _alert_demo:
         co2  = 7.5    # > 6.0 → CAUTION: Elevated cabin CO₂ (warn threshold: 8 mmHg)
-        dose = 158.0  # > 150 → WARNING: Mission cumulative radiation
 
     return EnvironmentalSnapshot(
         cabin_co2_mmhg=round(max(2.0, co2), 2),

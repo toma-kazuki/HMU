@@ -788,7 +788,12 @@ const DEVICE_META = {
   actiwatch:    { icon: "⌚", name: "Actiwatch"          },
   personal_co2: { icon: "💨", name: "Personal CO₂"       },
   evarm:        { icon: "☢", name: "EVARM"              },
-  environmental:{ icon: "🌍", name: "Environmental"      },
+};
+
+// Extended lookup for related-params grouping — includes non-wearable sources
+const DEVICE_DISPLAY = {
+  ...DEVICE_META,
+  environmental: { icon: "🌍", name: "Environmental" },
 };
 
 // ── State ────────────────────────────────────────────
@@ -1400,6 +1405,7 @@ function closeScoreDetail() {
   selectedScore = null;
   el("score-detail-panel").classList.add("hidden");
   el("detail-score-grid").querySelectorAll(".score-card").forEach((c) => c.classList.remove("selected"));
+  el("sdp-advice").innerHTML = "";
   destroyScoreChart();
 }
 
@@ -1607,7 +1613,6 @@ function renderScoreAdviceBlock(scoreKey, scoreValue, cognitiveRisk) {
 // ── Relevant sensor subset ────────────────────────────
 function renderSensorSubset(meta, devices, scoreKey, scoreValue, cognitiveRisk) {
   if (!devices) return;
-  const adviceHtml = renderScoreAdviceBlock(scoreKey, scoreValue, cognitiveRisk);
   const sensorsHtml = meta.sensors.map(({ device, icon, name, fields }) => {
     const d = devices[device];
     if (!d) return "";
@@ -1626,7 +1631,9 @@ function renderSensorSubset(meta, devices, scoreKey, scoreValue, cognitiveRisk) 
       <div class="sdp-device-rows">${rows}</div>
     </div>`;
   }).join("");
-  el("sdp-sensors").innerHTML = adviceHtml + sensorsHtml;
+  el("sdp-sensors").innerHTML = sensorsHtml;
+  // Advice panels rendered separately below HMU Intelligence — Score Assessment
+  el("sdp-advice").innerHTML = renderScoreAdviceBlock(scoreKey, scoreValue, cognitiveRisk);
 }
 
 // ── Environmental (detail modal) ──────────────────────
@@ -2066,7 +2073,7 @@ function relatedParamsHtml(relatedParams) {
   const blocks = RELATED_DEVICE_ORDER
     .filter((d) => groups[d])
     .map((device) => {
-      const dm = DEVICE_META[device] || { icon: "📡", name: device };
+      const dm = DEVICE_DISPLAY[device] || { icon: "📡", name: device };
       const rows = groups[device].map((p) => {
         const meta     = FIELD_META[p.field];
         const raw      = getNestedValue(lastDetailData, p.field);

@@ -2536,8 +2536,8 @@ body {
   color: var(--text-muted);
 }
 .related-params-devices {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 0.4rem;
 }
 .related-params-panel .sdp-row--alarming .sdp-row-label { color: #f85149; }
