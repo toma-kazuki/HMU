@@ -253,6 +253,13 @@ body {
   max-width: 100%;
 }
 
+/* Transit Return: fill grows from Mars (right) toward Earth (left) */
+.mission-track-fill--return {
+  left: auto;
+  right: 0;
+  background: linear-gradient(90deg, rgba(210, 80, 60, 0.55), rgba(220, 120, 80, 0.35));
+}
+
 .mission-track-pin {
   position: absolute;
   top: 50%;

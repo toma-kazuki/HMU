@@ -105,7 +105,12 @@ function renderMissionTransit(missionDay) {
     }
   }
   const pct = Math.min(100, Math.max(0, ctx.progressFromEarthPct));
-  if (fillEl) fillEl.style.width = `${pct}%`;
+  if (fillEl) {
+    const isReturn = ctx.phase === 2;
+    fillEl.classList.toggle("mission-track-fill--return", isReturn);
+    // Return leg: fill from Mars side — width = distance already covered toward Earth
+    fillEl.style.width = isReturn ? `${100 - pct}%` : `${pct}%`;
+  }
   if (pinEl) pinEl.style.left = `${pct}%`;
   if (trackEl) {
     const pctRounded = Math.round(pct);
