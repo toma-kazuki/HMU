@@ -312,7 +312,7 @@ body {
 }
 
 .crew-activity-status {
-  margin: 0 0 0.75rem;
+  margin: 0 0 0.4rem;
   width: 100%;
 }
 
@@ -477,7 +477,7 @@ body {
   background: var(--bg-raised);
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  padding: 1.5rem 1.1rem 1.2rem;
+  padding: 1.5rem 0.75rem 1.2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -485,6 +485,14 @@ body {
   transition: border-color 0.15s, box-shadow 0.15s;
   text-align: center;
   position: relative;
+}
+
+/* Use full card width for activity row + score radar (avoid shrink-to-content side margins). */
+.crew-card .crew-activity-status,
+.crew-card .crew-scores {
+  align-self: stretch;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .crew-card:hover {
@@ -570,12 +578,82 @@ body {
   margin-bottom: 0.45rem;
 }
 
-/* Score table */
+/* Score table / radar (overview) */
 .crew-scores {
   width: 100%;
   display: flex;
   flex-direction: column;
-  gap: 0.38rem;
+  align-items: stretch;
+  gap: 0.15rem;
+  margin-top: 0.05rem;
+  padding: 0;
+}
+
+.crew-radar {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+}
+
+.crew-radar-svg {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  aspect-ratio: 124 / 116;
+  overflow: visible;
+}
+
+.crew-radar .radar-hex {
+  fill: none;
+  /* Brighter than --border-subtle for legibility on dark bg */
+  stroke: color-mix(in srgb, var(--border) 28%, #9aa4b1 72%);
+  stroke-width: 0.68;
+  vector-effect: non-scaling-stroke;
+}
+
+.crew-radar .radar-axis {
+  fill: none;
+  stroke: color-mix(in srgb, var(--border) 22%, #9aa4b1 78%);
+  stroke-width: 0.58;
+  vector-effect: non-scaling-stroke;
+  opacity: 1;
+}
+
+.crew-radar .radar-surface {
+  fill: color-mix(in srgb, var(--accent) 12%, transparent);
+  stroke: none;
+}
+
+.crew-radar .radar-seg {
+  fill: none;
+  stroke-width: 1.35;
+  vector-effect: non-scaling-stroke;
+}
+
+.crew-radar .radar-seg.good   { stroke: var(--success); }
+.crew-radar .radar-seg.medium { stroke: var(--caution); }
+.crew-radar .radar-seg.low    { stroke: var(--emergency); }
+
+.crew-radar .radar-vertex {
+  stroke: var(--bg-raised);
+  stroke-width: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.crew-radar .radar-vertex.good   { fill: var(--success); }
+.crew-radar .radar-vertex.medium { fill: var(--caution); }
+.crew-radar .radar-vertex.low    { fill: var(--emergency); }
+
+.crew-radar .radar-lbl {
+  font-size: 4.65px;
+  font-weight: 600;
+  font-family: var(--font-sans, var(--font));
+  fill: var(--text-muted);
+  letter-spacing: 0.01em;
+  pointer-events: none;
 }
 
 .score-row {

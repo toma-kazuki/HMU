@@ -635,16 +635,16 @@ async function fetchAndRenderAssessment(data) {
       threshold: a.threshold ?? '',
     })),
     wearable:      {
-      health_score:             data.wearable.health_score,
-      sleep_score:              data.wearable.sleep_score,
-      fatigue_score:            data.wearable.fatigue_score,
-      stress_management_score:  data.wearable.stress_management_score,
-      readiness_score:          data.wearable.readiness_score,
-      heart_rate_bpm:           data.wearable.heart_rate_bpm,
-      spo2_pct:                 data.wearable.spo2_pct,
-      systolic_mmhg:            data.wearable.systolic_mmhg,
-      diastolic_mmhg:           data.wearable.diastolic_mmhg,
-      respiratory_rate_bpm:     data.wearable.respiratory_rate_bpm,
+      health_score:             data.scores.health_score,
+      sleep_score:              data.scores.sleep_score,
+      fatigue_score:            data.scores.fatigue_score,
+      stress_management_score:  data.scores.stress_management_score,
+      readiness_score:          data.scores.readiness_score,
+      heart_rate_bpm:           data.devices.bio_monitor.heart_rate_bpm,
+      spo2_pct:                 data.devices.bio_monitor.spo2_pct,
+      systolic_mmhg:            data.devices.bio_monitor.systolic_mmhg,
+      diastolic_mmhg:           data.devices.bio_monitor.diastolic_mmhg,
+      respiratory_rate_bpm:     data.devices.bio_monitor.breathing_rate_bpm,
     },
     environmental: {
       cabin_co2_mmhg:              data.environmental.cabin_co2_mmhg,
@@ -815,6 +815,106 @@ function formatTime(d)  { return d.toLocaleTimeString(undefined, { hour: "2-digi
 function scoreClass(v)  { return v > 70 ? "good" : v >= 60 ? "medium" : "low"; }
 function initials(name) { const p = name.trim().split(/\s+/); return p.length >= 2 ? (p[0][0] + p[p.length-1][0]).toUpperCase() : name.slice(0,2).toUpperCase(); }
 
+/** Worse of two score tiers (for radar edge colouring). */
+function worseScoreClass(a, b) {
+  const rank = (v) => (v > 70 ? 0 : v >= 60 ? 1 : 2);
+  const w    = Math.max(rank(a), rank(b));
+  return w === 0 ? "good" : w === 1 ? "medium" : "low";
+}
+
+const CREW_RADAR_AXES = [
+  { key: "health_score", name: "Health" },
+  { key: "sleep_score", name: "Sleep" },
+  { key: "fatigue_score", name: "Fatigue" },
+  { key: "stress_score", name: "Stress" },
+  { key: "activity_score", name: "Activity" },
+  { key: "readiness_score", name: "Readiness" },
+];
+
+/**
+ * SVG hex (6-axis) radar for overview crew card — vertex + edge colours follow scoreClass (VD-R03).
+ */
+function crewRadarChartHtml(c) {
+  const n   = 6;
+  const cx  = 50;
+  const cy  = 50;
+  /* Large hex within 0..100 so the chart reads clearly on the card. */
+  const rMax = 39;
+  const rows = CREW_RADAR_AXES.map((axis) => {
+    const v = Math.max(0, Math.min(100, Number(c[axis.key] ?? 0)));
+    return { v, cls: scoreClass(v), name: axis.name };
+  });
+
+  const ang = (i) => -Math.PI / 2 + (i * 2 * Math.PI) / n;
+  const vAt  = (rad, i) => {
+    const t = ang(i);
+    return { x: cx + rad * Math.cos(t), y: cy + rad * Math.sin(t) };
+  };
+
+  const hexPoly = (frac) => {
+    const r = rMax * frac;
+    return Array.from({ length: n }, (_, i) => {
+      const p = vAt(r, i);
+      return `${p.x.toFixed(2)},${p.y.toFixed(2)}`;
+    }).join(" ");
+  };
+
+  const gridHex = [1, 2 / 3, 1 / 3]
+    .map((f) => `<polygon class="radar-hex" points="${hexPoly(f)}" />`)
+    .join("");
+
+  const axisLines = Array.from({ length: n }, (_, i) => {
+    const p = vAt(rMax, i);
+    return `<line class="radar-axis" x1="${cx}" y1="${cy}" x2="${p.x.toFixed(2)}" y2="${p.y.toFixed(2)}" />`;
+  }).join("");
+
+  const dataPts = rows.map((row, i) => {
+    const r = (row.v / 100) * rMax;
+    return { ...vAt(r, i), ...row, i };
+  });
+
+  const polyPoints = dataPts.map((p) => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+
+  const segs = [];
+  for (let i = 0; i < n; i++) {
+    const a = dataPts[i], b = dataPts[(i + 1) % n];
+    const eCls = worseScoreClass(rows[i].v, rows[(i + 1) % n].v);
+    segs.push(
+      `<line class="radar-seg ${eCls}" x1="${a.x.toFixed(2)}" y1="${a.y.toFixed(2)}" x2="${b.x.toFixed(2)}" y2="${b.y.toFixed(2)}" />`,
+    );
+  }
+
+  /* Just past the outer grid — short gap, labels stay legible. */
+  const rLab = 42.2;
+  const labels = rows.map((row, i) => {
+    const p  = vAt(rLab, i);
+    const co = Math.cos(ang(i));
+    const anc = co > 0.45 ? "start" : co < -0.45 ? "end" : "middle";
+    return `<g class="radar-lbl-g">`
+         + `<text class="radar-lbl" x="${p.x.toFixed(2)}" y="${p.y.toFixed(2)}" text-anchor="${anc}" dominant-baseline="middle">${escapeHtml(row.name)}</text>`
+         + `</g>`;
+  }).join("");
+
+  const dots = dataPts.map(
+    (p) =>
+      `<circle class="radar-vertex ${p.cls}" cx="${p.x.toFixed(2)}" cy="${p.y.toFixed(2)}" r="3.1"/>`,
+  );
+
+  const aria = rows.map((r) => `${r.name} ${r.v}`).join(", ");
+
+  /* Tight around chart + labels (less empty viewBox margin) so the graphic scales up in the card. */
+  const vb = "-12 -6 124 116";
+  return `<div class="crew-radar" role="img" aria-label="Score radar. ${aria}. Green above 70, yellow 60–70, red below 60.">`
+    + `<svg class="crew-radar-svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" overflow="visible" aria-hidden="true" focusable="false">`
+    + gridHex
+    + axisLines
+    + `<polygon class="radar-surface" points="${polyPoints}" />`
+    + segs.join("")
+    + dots.join("")
+    + labels
+    + "</svg></div>";
+}
+
 // ── Clock ────────────────────────────────────────────
 function tickClock() {
   const now = new Date();
@@ -924,7 +1024,7 @@ async function loadCrewDetailData() {
   if (data.location) detailLocationKey = data.location;
 
   renderDeviceStatusBar(data.devices);
-  renderScoreCards(data.wearable);
+  renderScoreCards(data.scores);
   renderAlerts(data.alerts);
   renderDetailStatusUI();
   initChat(detailCrewId);
@@ -1011,10 +1111,7 @@ function renderCrewBoard(data) {
         </div>
       </div>
       <div class="crew-scores">
-        <div class="score-row"><span class="s-label">Health</span><span class="s-value ${scoreClass(c.health_score)}">${c.health_score}</span></div>
-        <div class="score-row"><span class="s-label">Sleep</span><span class="s-value ${scoreClass(c.sleep_score)}">${c.sleep_score}</span></div>
-        <div class="score-row"><span class="s-label">Fatigue</span><span class="s-value ${scoreClass(c.fatigue_score)}">${c.fatigue_score}</span></div>
-        <div class="score-row"><span class="s-label">Stress</span><span class="s-value ${scoreClass(c.stress_score)}">${c.stress_score}</span></div>
+        ${crewRadarChartHtml(c)}
       </div>
       <p class="crew-open-hint">Click for detailed view</p>`;
 
@@ -1289,10 +1386,10 @@ function toggleScoreDetail(scoreKey) {
   // Sync the scale buttons to current scale
   syncScaleButtons();
 
-  const scoreValue = lastDetailData?.wearable[scoreKey] ?? 70;
+  const scoreValue = lastDetailData?.scores[scoreKey] ?? 70;
   renderScoreChart(scoreKey, scoreValue, meta.color, currentScale);
   renderSensorSubset(meta, lastDetailData?.devices, scoreKey, scoreValue, lastDetailData?.cognitive_risk);
-  renderScoreReportPanel(scoreKey, lastDetailData?.wearable, lastDetailData?.devices, lastDetailData?.mission_day);
+  renderScoreReportPanel(scoreKey, lastDetailData?.scores, lastDetailData?.devices, lastDetailData?.mission_day);
 
   el("score-detail-panel").classList.remove("hidden");
   el("score-detail-panel").scrollIntoView({ behavior: "smooth", block: "nearest" });
@@ -1318,7 +1415,7 @@ function onScaleChange(scale) {
   currentScale = scale;
   syncScaleButtons();
   const meta  = SCORE_DETAILS[selectedScore];
-  const value = lastDetailData?.wearable[selectedScore] ?? 70;
+  const value = lastDetailData?.scores[selectedScore] ?? 70;
   renderScoreChart(selectedScore, value, meta.color, currentScale);
 }
 
@@ -1601,8 +1698,8 @@ function mockCumulativeSeries(current, n = 24, dailyRate = 1.1) {
 const ALERT_TREND_MAP = {
   'SpO₂': {
     label: 'SpO₂',       unit: '%',     color: '#79c0ff',
-    getSeries: d => d.vitals_series.map(s => s.spo2_pct),
-    getLabels:  d => d.vitals_series.map(s => fmtMin(s.t_offset_min)),
+    getSeries: d => mockParamSeries(d.devices.bio_monitor.spo2_pct, 48, 0.8),
+    getLabels:  () => mockHourLabels(48),
     thresholds: [
       { value: 94, label: 'Caution < 94%',  color: '#d29922' },
       { value: 92, label: 'Warning < 92%',  color: '#f85149' },
@@ -1610,8 +1707,8 @@ const ALERT_TREND_MAP = {
   },
   'Heart rate': {
     label: 'Heart Rate',  unit: 'bpm',   color: '#f0883e',
-    getSeries: d => d.vitals_series.map(s => s.heart_rate_bpm),
-    getLabels:  d => d.vitals_series.map(s => fmtMin(s.t_offset_min)),
+    getSeries: d => mockParamSeries(d.devices.bio_monitor.heart_rate_bpm, 48, 6),
+    getLabels:  () => mockHourLabels(48),
     thresholds: [
       { value: 45,  label: 'Caution < 45 bpm',   color: '#d29922' },
       { value: 40,  label: 'Warning < 40 bpm',   color: '#f85149' },
@@ -1619,10 +1716,10 @@ const ALERT_TREND_MAP = {
       { value: 130, label: 'Warning > 130 bpm',  color: '#f85149' },
     ],
   },
-  'Respiratory rate': {
-    label: 'Respiratory Rate', unit: 'br/min', color: '#56d364',
-    getSeries: d => d.vitals_series.map(s => s.respiratory_rate_bpm),
-    getLabels:  d => d.vitals_series.map(s => fmtMin(s.t_offset_min)),
+  'Breathing rate': {
+    label: 'Breathing Rate', unit: 'br/min', color: '#56d364',
+    getSeries: d => mockParamSeries(d.devices.bio_monitor.breathing_rate_bpm, 48, 2),
+    getLabels:  () => mockHourLabels(48),
     thresholds: [
       { value: 10, label: 'Caution < 10 br/min', color: '#d29922' },
       { value: 8,  label: 'Warning < 8 br/min',  color: '#f85149' },
@@ -1632,7 +1729,7 @@ const ALERT_TREND_MAP = {
   },
   'Systolic BP': {
     label: 'Systolic Blood Pressure', unit: 'mmHg', color: '#db6d28',
-    getSeries: d => mockParamSeries(d.wearable.systolic_mmhg, 24, 5),
+    getSeries: d => mockParamSeries(d.devices.bio_monitor.systolic_mmhg, 24, 5),
     getLabels:  () => mockHourLabels(24),
     thresholds: [
       { value: 90,  label: 'Caution < 90 mmHg',  color: '#d29922' },
@@ -1669,6 +1766,69 @@ const ALERT_TREND_MAP = {
       { value: 26, label: 'Caution > 26 °C',  color: '#d29922' },
       { value: 27, label: 'Warning > 27 °C',  color: '#f85149' },
     ],
+  },
+  'Core body temperature': {
+    label: 'Core Body Temperature', unit: '°C', color: '#f0883e',
+    getSeries: d => mockParamSeries(d.devices?.thermo_mini?.core_body_temp_c ?? 37.0, 24, 0.2),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [
+      { value: 36.0, label: 'Caution < 36.0 °C',  color: '#d29922' },
+      { value: 35.0, label: 'Warning < 35.0 °C',  color: '#f85149' },
+      { value: 37.5, label: 'Caution > 37.5 °C',  color: '#d29922' },
+      { value: 38.0, label: 'Warning > 38.0 °C',  color: '#f85149' },
+    ],
+  },
+  'Personal CO₂': {
+    label: 'Personal CO₂', unit: 'ppm', color: '#d29922',
+    getSeries: d => mockParamSeries(d.devices?.personal_co2?.current_ppm ?? 600, 24, 80),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [
+      { value: 1000, label: 'Caution > 1 000 ppm', color: '#d29922' },
+      { value: 2500, label: 'Warning > 2 500 ppm', color: '#f85149' },
+    ],
+  },
+  'Cabin humidity': {
+    label: 'Cabin Humidity', unit: '%', color: '#79c0ff',
+    getSeries: d => mockParamSeries(d.environmental.cabin_humidity_pct, 24, 2),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [
+      { value: 30, label: 'Caution < 30%',  color: '#d29922' },
+      { value: 25, label: 'Warning < 25%',  color: '#f85149' },
+      { value: 70, label: 'Caution > 70%',  color: '#d29922' },
+      { value: 75, label: 'Warning > 75%',  color: '#f85149' },
+    ],
+  },
+  'Diastolic BP': {
+    label: 'Diastolic Blood Pressure', unit: 'mmHg', color: '#bc8cff',
+    getSeries: d => mockParamSeries(d.devices?.bio_monitor?.diastolic_mmhg ?? 80, 24, 4),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [],
+  },
+  'Resting heart rate': {
+    label: 'Resting Heart Rate', unit: 'bpm', color: '#f0883e',
+    getSeries: d => mockParamSeries(d.devices?.bio_monitor?.resting_heart_rate_bpm ?? 60, 24, 3),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [],
+  },
+  'Body temp deviation': {
+    label: 'Body Temperature Deviation', unit: '°C', color: '#56d364',
+    getSeries: d => mockParamSeries(d.devices?.oura_ring?.body_temp_deviation_c ?? 0, 24, 0.15),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [
+      { value: 0, label: 'Baseline', color: '#8b949e' },
+    ],
+  },
+  'Dose rate': {
+    label: 'Dose Rate', unit: 'μSv/h', color: '#bc8cff',
+    getSeries: d => mockParamSeries(d.devices?.evarm?.dose_rate_usv_h ?? 50, 24, 10),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [],
+  },
+  'Personal cumulative dose': {
+    label: 'Personal Cumulative Dose', unit: 'mSv', color: '#bc8cff',
+    getSeries: d => mockCumulativeSeries(d.devices?.evarm?.personal_cumulative_msv ?? 0, 24, 1.1),
+    getLabels:  () => mockHourLabels(24),
+    thresholds: [],
   },
   // Integrity alerts — map to underlying signal trends
   'Heart rate channel':    null,   // handled via aliasing below
