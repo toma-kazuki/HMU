@@ -576,6 +576,8 @@ This section defines the symptom label, trigger logic, parameter relationships, 
 **Alert title:** "Cardiovascular decompensation risk"  
 **Plain-language gloss:** "Multiple cardiovascular signs are abnormal simultaneously. Immediate assessment is needed."
 
+**Trend chart parameter:** None — `AlertItem.parameter` is intentionally `null` for this symptom. This alert is a composite trigger (HR + SBP + SpO₂ simultaneously); no single parameter is the primary driver. The frontend suppresses the trend chart panel when `parameter` is null (`hasTrend = false`). Individual parameter trends are accessible via the related-parameters panel.
+
 #### Trigger logic and urgency
 
 | Tier | Trigger condition | Urgency |
