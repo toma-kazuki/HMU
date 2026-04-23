@@ -2528,11 +2528,16 @@ body {
   padding-top: 0.6rem;
 }
 .related-params-heading {
-  margin: 0 0 0.4rem;
+  margin: 0 0 0.5rem;
   font-size: 0.68rem;
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-muted);
+}
+.related-params-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 .related-params-panel .sdp-row--alarming .sdp-row-label { color: #f85149; }

@@ -788,6 +788,7 @@ const DEVICE_META = {
   actiwatch:    { icon: "⌚", name: "Actiwatch"          },
   personal_co2: { icon: "💨", name: "Personal CO₂"       },
   evarm:        { icon: "☢", name: "EVARM"              },
+  environmental:{ icon: "🌍", name: "Environmental"      },
 };
 
 // ── State ────────────────────────────────────────────
@@ -2039,42 +2040,60 @@ const FIELD_META = {
 };
 
 // ── Related parameter panel ───────────────────────────
+// Device display order for related-params grouping
+const RELATED_DEVICE_ORDER = [
+  "bio_monitor", "thermo_mini", "oura_ring", "personal_co2", "evarm", "environmental",
+];
+
 function relatedParamsHtml(relatedParams) {
   if (!relatedParams || !relatedParams.length) return "";
   // Filter: always = show, if_alarming = show only when alarming, context = never
-  const visible = relatedParams
-    .filter((p) => {
-      if (p.show_rule === "always")      return true;
-      if (p.show_rule === "if_alarming") return p.currently_alarming === true;
-      return false; // context — hidden
-    })
-    .sort((a, b) => {
-      const order = { always: 0, if_alarming: 1 };
-      return (order[a.show_rule] ?? 2) - (order[b.show_rule] ?? 2);
-    });
+  const visible = relatedParams.filter((p) => {
+    if (p.show_rule === "always")      return true;
+    if (p.show_rule === "if_alarming") return p.currently_alarming === true;
+    return false; // context — hidden
+  });
 
   if (!visible.length) return "";
 
-  const rows = visible.map((p) => {
-    const meta = FIELD_META[p.field];
-    const raw  = getNestedValue(lastDetailData, p.field);
-    const label    = meta ? meta.label : p.field;
-    const valueStr = (raw !== undefined && raw !== null && meta) ? meta.fmt(raw) : (raw !== undefined && raw !== null ? String(raw) : "—");
-    const paramId  = meta?.paramId || null;
-    const rawNum   = (typeof raw === "number") ? raw : parseFloat(raw);
-    const cls  = (paramId && !isNaN(rawNum)) ? paramClass(paramId, rawNum) : "";
-    const bar  = (paramId && !isNaN(rawNum) && PARAM_RANGES[paramId]) ? sensorMiniBar(paramId, rawNum) : "";
-    const alarmCls = p.currently_alarming ? " sdp-row--alarming" : "";
-    return `<div class="sdp-row${bar ? ' has-bar' : ''}${alarmCls}">
-      <span class="sdp-row-label">${escapeHtml(label)}</span>
-      <span class="sdp-row-value ${cls}">${escapeHtml(valueStr)}</span>
-      ${bar}
-    </div>`;
-  }).join("");
+  // Group by device (prefix of "device.field")
+  const groups = {};
+  for (const p of visible) {
+    const device = p.field.split(".")[0];
+    (groups[device] = groups[device] || []).push(p);
+  }
+
+  const blocks = RELATED_DEVICE_ORDER
+    .filter((d) => groups[d])
+    .map((device) => {
+      const dm = DEVICE_META[device] || { icon: "📡", name: device };
+      const rows = groups[device].map((p) => {
+        const meta     = FIELD_META[p.field];
+        const raw      = getNestedValue(lastDetailData, p.field);
+        const label    = meta ? meta.label : p.field;
+        const valueStr = (raw !== undefined && raw !== null && meta)
+          ? meta.fmt(raw)
+          : (raw !== undefined && raw !== null ? String(raw) : "—");
+        const paramId  = meta?.paramId || null;
+        const rawNum   = (typeof raw === "number") ? raw : parseFloat(raw);
+        const cls      = (paramId && !isNaN(rawNum)) ? paramClass(paramId, rawNum) : "";
+        const bar      = (paramId && !isNaN(rawNum) && PARAM_RANGES[paramId]) ? sensorMiniBar(paramId, rawNum) : "";
+        const alarmCls = p.currently_alarming ? " sdp-row--alarming" : "";
+        return `<div class="sdp-row${bar ? " has-bar" : ""}${alarmCls}">
+          <span class="sdp-row-label">${escapeHtml(label)}</span>
+          <span class="sdp-row-value ${cls}">${escapeHtml(valueStr)}</span>
+          ${bar}
+        </div>`;
+      }).join("");
+      return `<div class="sdp-device-block">
+        <div class="sdp-device-header">${dm.icon} ${dm.name}</div>
+        <div class="sdp-device-rows">${rows}</div>
+      </div>`;
+    }).join("");
 
   return `<div class="related-params-panel">
     <p class="related-params-heading">Related parameters</p>
-    ${rows}
+    <div class="related-params-devices">${blocks}</div>
   </div>`;
 }
 
