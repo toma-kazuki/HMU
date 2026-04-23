@@ -481,35 +481,30 @@ def _evaluate_hypercapnia(
     if both_caut and not (cabin_warn or pers_warn):
         # Both sources at Caution simultaneously → Emergency (severity upgrade per §5.2)
         _src = "Environmental & Personal CO₂ monitors"
-        _par = "Cabin CO₂ / Personal CO₂"
         _val = f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm"
         return _make_alert(
             "co2-emerg", "cabin_co2_high", "emergency", AlertSeverity.WARNING,
             "Hypercapnia (high CO₂)",
             "Both cabin and personal CO₂ elevated simultaneously — severity upgraded.",
-            _src, _par, _val, "Cabin CO₂ > 6 mmHg AND Personal CO₂ > 1 000 ppm",
+            _src, "Cabin CO₂", _val, "Cabin CO₂ > 6 mmHg AND Personal CO₂ > 1 000 ppm",
             devices, env,
         )
     if cabin_warn or pers_warn:
         _src = "Environmental & Personal CO₂ monitors" if cabin_warn and pers_warn \
                else ("Environmental monitor" if cabin_warn else "Personal CO₂ monitor")
-        _par = "Cabin CO₂ / Personal CO₂" if cabin_warn and pers_warn \
-               else ("Cabin CO₂" if cabin_warn else "Personal CO₂")
         _val = f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm" if cabin_warn and pers_warn \
                else (f"{co2_mmhg:.2f} mmHg" if cabin_warn else f"{pco2:.0f} ppm")
         return _make_alert(
             "co2-warn", "cabin_co2_high", "warning", AlertSeverity.WARNING,
             "Hypercapnia (high CO₂)",
             "CO₂ at Warning level; initiate scrubber recovery and improve ventilation immediately.",
-            _src, _par, _val, "> 8 mmHg or > 2 500 ppm",
+            _src, "Cabin CO₂", _val, "> 8 mmHg or > 2 500 ppm",
             devices, env,
         )
     if cabin_caut or pers_caut:
         _src = "Environmental monitor" if cabin_caut and not pers_caut \
                else ("Personal CO₂ monitor" if pers_caut and not cabin_caut \
                else "Environmental & Personal CO₂ monitors")
-        _par = "Cabin CO₂" if cabin_caut and not pers_caut \
-               else ("Personal CO₂" if pers_caut and not cabin_caut else "Cabin CO₂ / Personal CO₂")
         _val = f"{co2_mmhg:.2f} mmHg" if cabin_caut and not pers_caut \
                else (f"{pco2:.0f} ppm" if pers_caut and not cabin_caut \
                else f"{co2_mmhg:.2f} mmHg / {pco2:.0f} ppm")
@@ -517,7 +512,7 @@ def _evaluate_hypercapnia(
             "co2-caut", "cabin_co2_high", "caution", AlertSeverity.CAUTION,
             "Hypercapnia (high CO₂)",
             "CO₂ levels elevated; move to better-ventilated area and notify Flight Surgeon.",
-            _src, _par, _val, "> 6 mmHg or > 1 000 ppm",
+            _src, "Cabin CO₂", _val, "> 6 mmHg or > 1 000 ppm",
             devices, env,
         )
     return None

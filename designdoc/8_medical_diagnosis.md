@@ -312,6 +312,8 @@ This section defines the symptom label, trigger logic, parameter relationships, 
 
 > **Implementation status:** Symptom-level labelling (`symptom_title`, `plain_language_gloss`, `urgency`, `related_params`) and composite Emergency triggers are implemented in `backend/alerts.py` (commit `212858e`). These features were proposed by AI and accepted; entries that were proposed and implemented are marked **[Proposal — implemented]**. The recommended actions text in each §5.X entry is crew-facing guidance embedded in this document; it is not rendered programmatically in the current UI. **[Proposal]** tags without "implemented" mark features not yet implemented in the software.
 
+**`AlertItem.parameter` — one per symptom, fixed:** Each symptom defines exactly one value for `AlertItem.parameter`. This string is the key used to look up the trend chart configuration in `ALERT_TREND_MAP` on the frontend. It must be a stable, single value regardless of which specific condition variant (Caution / Warning / Emergency, single-source / multi-source) fired the alert. When a symptom has multiple trigger sources (e.g., Hypercapnia can be triggered by cabin CO₂ or personal CO₂), the primary source for the trend chart is designated in each §5.X entry under **Trend chart parameter**. Secondary trigger information is conveyed via `AlertItem.source` and the related-parameters panel — never via `AlertItem.parameter`.
+
 ---
 
 ### 5.1 Hypoxaemia — low blood oxygen
@@ -361,6 +363,8 @@ This section defines the symptom label, trigger logic, parameter relationships, 
 
 **Alert title:** "Hypercapnia (high CO₂)"  
 **Plain-language gloss:** "CO₂ levels are elevated. This can cause headache, difficulty concentrating, and increased breathing rate."
+
+**Trend chart parameter:** `environmental.cabin_co2_mmhg` ("Cabin CO₂") — always, regardless of which source triggered the alert. `AlertItem.parameter` is fixed to `"Cabin CO₂"` for all tiers of this symptom. When Personal CO₂ is the sole or contributing trigger, that information is conveyed via `AlertItem.source` and the related-parameters panel, not via `parameter`.
 
 #### Trigger logic and urgency
 
