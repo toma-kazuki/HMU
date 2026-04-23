@@ -270,8 +270,14 @@ body {
   background: var(--text);
   border: 2px solid var(--accent);
   box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.25);
+  transition: border-color 0.3s, box-shadow 0.3s;
   transform: translateY(-50%);
   pointer-events: none;
+}
+
+.mission-track-pin--return {
+  border-color: rgba(210, 80, 60, 0.9);
+  box-shadow: 0 0 0 2px rgba(210, 80, 60, 0.25);
 }
 
 .mono { font-variant-numeric: tabular-nums; }
