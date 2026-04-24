@@ -113,7 +113,7 @@ _demo_degraded: bool = False
 #
 # Together these drive mission mode → ALERT and demonstrate the full pipeline.
 # Toggle via POST /api/settings/alert-demo or the "Alert Demo" checkbox in the UI.
-_alert_demo: bool = True
+_alert_demo: bool = False
 _ALERT_DEMO_CREW  = "CM-2"
 _ALERT_DEMO_DAY   = 360   # Transit Return leg day 150/210
 
