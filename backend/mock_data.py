@@ -181,13 +181,15 @@ def build_devices(
     stressed = scenario == "stress"
 
     # ── Core vitals (shared across bio-monitor fields) ───────────────────────
-    base_hr = {"nominal": 72, "exercise": 128, "stress": 112, "sleep": 54}[scenario]
+    base_hr = {"nominal": 72, "exercise": 118, "stress": 112, "sleep": 54}[scenario]
     hr_jitter = rng.uniform(-4, 4) + _wave(0.3, mission_day * 17 + rng.randint(0, 50)) * 6
     hr = max(38, base_hr + hr_jitter)
+    if exercising:
+        hr = min(hr, 129.0)  # cap: keep below Warning threshold (130 bpm)
 
     spo2 = 97 + rng.uniform(-1.2, 0.8)
     if stressed:
-        spo2 -= rng.uniform(0, 2)
+        spo2 = max(spo2 - rng.uniform(0, 2), 95.0)  # cap: keep above Caution threshold (94%)
 
     rr = 14 + rng.uniform(-2, 3) + (6 if exercising else 0)
 
@@ -262,9 +264,9 @@ def build_devices(
     # ── Thermo-mini ──────────────────────────────────
     core_base = 37.0 + rng.uniform(-0.2, 0.3)
     if exercising:
-        core_base += rng.uniform(0.5, 1.2)
+        core_base = min(core_base + rng.uniform(0.5, 1.2), 37.4)  # cap: keep below Caution (37.5°C)
     if stressed:
-        core_base += rng.uniform(0.1, 0.4)
+        core_base = min(core_base + rng.uniform(0.1, 0.4), 37.4)  # cap: keep below Caution (37.5°C)
     thermo = ThermoMiniData(
         status=_dev_status(88),
         core_body_temp_c=round(core_base, 2),
@@ -293,8 +295,8 @@ def build_devices(
     )
 
     # ── Personal CO₂ monitor ─────────────────────────
-    co2_base = {"nominal": 820, "sleep": 750, "exercise": 1350, "stress": 1050}[scenario]
-    co2_ppm = round(co2_base + rng.uniform(-80, 120), 0)
+    co2_base = {"nominal": 820, "sleep": 750, "exercise": 880, "stress": 880}[scenario]
+    co2_ppm = round(min(co2_base + rng.uniform(-80, 120), 980), 0)  # cap: keep below Caution (1000 ppm)
     co2_peak = round(co2_ppm * rng.uniform(1.05, 1.25), 0)
     personal_co2 = PersonalCO2Data(
         status=_dev_status(91),
@@ -369,7 +371,7 @@ def build_environmental(mission_day: int) -> EnvironmentalSnapshot:
     co2 = min(4.2 + rng.uniform(0, 2.8) + _wave(1.1, mission_day) * 0.6, 5.8)
     temp = 22.5 + rng.uniform(-1.5, 2.5)
     humidity = 55.0 + rng.uniform(-8, 10)
-    dose = 4.0 + mission_day * 0.28 + rng.uniform(0, 2)
+    dose = min(4.0 + mission_day * 0.28 + rng.uniform(0, 2), 48.0)  # cap: keep below Caution (50 mSv)
 
     # ── Alert demo overrides ──────────────────────────────────────────────────
     if _alert_demo:
