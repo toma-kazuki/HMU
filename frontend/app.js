@@ -368,7 +368,7 @@ const SCORE_ADVICE = {
 /** Per-crew message history: Map<crew_id, Array<{role, sender, text, ts}>> */
 const chatHistories = new Map();
 let chatCrewId      = null;   // crew currently open in modal
-let chatRecipient   = 'ai';   // 'ai' | 'surgeon'
+let chatRecipient   = 'surgeon';   // 'ai' | 'surgeon'
 let surgeonTypingId = null;   // timeout handle for surgeon reply
 
 // ── Flight surgeon reply bank (mock — surgeon is offline) ─────────────────
