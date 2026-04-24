@@ -35,6 +35,10 @@ _SCENARIO_BY_INDEX: tuple[str, ...] = ("nominal", "exercise", "stress", "sleep")
 
 def scenario_for_crew_id(crew_member_id: str) -> str:
     """Deterministic operational scenario per crew member (supports mixed-crew display)."""
+    # Alert demo: keep the target crew at rest so physiological deviations aren't
+    # ambiguous with exercise-driven changes.
+    if _alert_demo and crew_member_id == _ALERT_DEMO_CREW:
+        return "nominal"
     for i, c in enumerate(CREW_ROSTER):
         if c["id"] == crew_member_id:
             return _SCENARIO_BY_INDEX[i % len(_SCENARIO_BY_INDEX)]
