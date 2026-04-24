@@ -362,7 +362,7 @@ def build_scores(
 
 def build_environmental(mission_day: int) -> EnvironmentalSnapshot:
     rng = random.Random(42 + mission_day)
-    co2 = 4.2 + rng.uniform(0, 2.8) + _wave(1.1, mission_day) * 0.6
+    co2 = min(4.2 + rng.uniform(0, 2.8) + _wave(1.1, mission_day) * 0.6, 5.8)
     temp = 22.5 + rng.uniform(-1.5, 2.5)
     humidity = 55.0 + rng.uniform(-8, 10)
     dose = 4.0 + mission_day * 0.28 + rng.uniform(0, 2)
