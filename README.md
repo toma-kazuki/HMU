@@ -13,70 +13,18 @@ Long-duration missions expose crew members to compounding stressors — microgra
 The design process followed a full systems engineering workflow (problem statement → ConOps → requirements → design → implementation), documented in [`designdoc/`](designdoc/).
 
 ---
-
-## Repository structure
-
-```
-HMU/
-├── backend/              # Python/FastAPI REST API
-│   ├── main.py           # App entry point, API routes
-│   ├── mock_data.py      # Deterministic mock data generator
-│   ├── alerts.py         # Rule-based symptom alert evaluator
-│   ├── dialogue.py       # OpenAI-backed chat and assessment endpoints
-│   ├── models.py         # Pydantic data models
-│   └── roster.py         # Crew registration API
-├── frontend/             # Vanilla HTML/CSS/JS single-page app
-│   ├── index.html        # Application shell
-│   ├── app.js            # All UI logic (~2 500 lines)
-│   └── styles.css        # Design system styles
-├── data/
-│   ├── crew_roster.json  # Persisted crew registration data
-│   ├── knowledge/
-│   │   └── parameter_symptom.csv   # Parameter–symptom mapping table
-│   └── photos/           # Crew avatar images (CM-1 … CM-4)
-├── designdoc/            # Full design documentation (Markdown)
-│   ├── 1_problemstatement.md
-│   ├── 2_conops.md
-│   ├── 2_designreferencemission.md
-│   ├── 3_requirements.md
-│   ├── 4_designapproach.md
-│   ├── 5_software_implementation.md
-│   ├── 6_visual_design.md
-│   ├── 7_parameter_logic.md
-│   ├── 8_medical_diagnosis.md
-│   └── history/          # Design modification records
-├── .env.example          # Environment variable template
-├── requirements.txt      # Python dependencies
-└── README.md
-```
-
----
-
-## Tech stack
-
-| Layer | Technology |
-|---|---|
-| Backend | Python 3.12+, FastAPI 0.115+, Uvicorn |
-| Data validation | Pydantic v2 |
-| AI features | OpenAI Python SDK 1.0+ (GPT-4o) |
-| Frontend | Plain HTML + CSS + Vanilla JavaScript |
-| Charts | Chart.js 4.4.6 (loaded from CDN) |
-| Config | python-dotenv |
-
----
-
 ## Setup and running
 
 ### 1. Prerequisites
 
+- This repo (for the latest version, access https://github.com/toma-kazuki/HMU.git)
 - Python 3.12 or later
-- An [OpenAI API key](https://platform.openai.com/api-keys) (GPT-4o access required for AI assessment and chat features)
+- [Optional] An [OpenAI API key](https://platform.openai.com/api-keys) (GPT-4o access required for AI assessment and chat features)
 
-### 2. Clone and create a virtual environment
+### 2. Create a virtual environment
+
 
 ```bash
-git clone <repo-url>
-cd HMU
 python3 -m venv .venv
 source .venv/bin/activate   # Windows: .venv\Scripts\activate
 ```
@@ -87,7 +35,7 @@ source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+### 4. [Optinal] If you have OpenAI API key
 
 ```bash
 cp .env.example .env
@@ -99,7 +47,7 @@ Open `.env` and replace the placeholder with your OpenAI API key:
 api_key=sk-...your-key-here...
 ```
 
-> The key is loaded by `python-dotenv` at startup. Never commit `.env` to version control — it is already listed in `.gitignore`.
+> The key is loaded by `python-dotenv` at startup. 
 
 ### 5. Start the server
 
@@ -177,21 +125,31 @@ The mission transit bar turns red and fills from the Mars side to reflect the in
 
 ---
 
-## Design documentation
+## Tech stack
 
-All design decisions are documented in [`designdoc/`](designdoc/). Reading order:
+| Layer | Technology |
+|---|---|
+| Backend | Python 3.12+, FastAPI 0.115+, Uvicorn |
+| Data validation | Pydantic v2 |
+| AI features | OpenAI Python SDK 1.0+ (GPT-4o) |
+| Frontend | Plain HTML + CSS + Vanilla JavaScript |
+| Charts | Chart.js 4.4.6 (loaded from CDN) |
+| Config | python-dotenv |
 
-1. [`1_problemstatement.md`](designdoc/1_problemstatement.md) — problem definition and motivation
-2. [`2_designreferencemission.md`](designdoc/2_designreferencemission.md) — reference mission parameters
-3. [`2_conops.md`](designdoc/2_conops.md) — concept of operations
-4. [`3_requirements.md`](designdoc/3_requirements.md) — system requirements
-5. [`4_designapproach.md`](designdoc/4_designapproach.md) — design approach and trade-offs
-6. [`5_software_implementation.md`](designdoc/5_software_implementation.md) — software architecture
-7. [`6_visual_design.md`](designdoc/6_visual_design.md) — UI/UX design rationale
-8. [`7_parameter_logic.md`](designdoc/7_parameter_logic.md) — sensor parameter definitions and thresholds
-9. [`8_medical_diagnosis.md`](designdoc/8_medical_diagnosis.md) — symptom detection logic and alert rules
+---
 
-Design modification records are in [`designdoc/history/`](designdoc/history/).
+## Repository structure
+
+```
+HMU/
+├── backend/              # Python/FastAPI REST API
+├── frontend/             # Vanilla HTML/CSS/JS single-page app
+├── data/                 # Crew registration data
+├── designdoc/            # Full design documentation (Markdown)
+├── .env.example          # Environment variable template
+├── requirements.txt      # Python dependencies
+└── README.md
+```
 
 ---
 
@@ -213,5 +171,4 @@ Some directions previous contributors have discussed:
 
 - **Real sensor integration** — replace `mock_data.py` with adapters for actual wearable APIs (Oura, Garmin, etc.)
 - **Persistent time-series** — store vitals in a database for genuine trend charts instead of mock series
-- **Additional crew** — the current crew model is fixed at four members; `roster.py` and the frontend both assume this
 - **Offline AI** — swap the OpenAI calls in `dialogue.py` for a locally hosted model for use in communication-denied environments
